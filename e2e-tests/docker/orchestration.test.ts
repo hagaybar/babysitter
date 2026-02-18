@@ -374,20 +374,32 @@ describe.skipIf(!HAS_API_KEY)("Stop hook verification", () => {
     expect(logContent).toContain("Run state:");
   });
 
-  test("stop hook updated iteration at least once", () => {
+  test("stop hook progressed beyond input (iterated or detected completion)", () => {
     const logFile = path.join(WORKSPACE_HOST, ".e2e-logs", "babysitter-stop-hook.log");
     if (!fs.existsSync(logFile)) return;
 
     const logContent = fs.readFileSync(logFile, "utf-8");
-    expect(logContent).toContain("Updated iteration to");
+    // The hook either iterated (multi-step run) or detected completion directly.
+    // Both are valid outcomes showing the hook fully processed the session.
+    expect(
+      logContent.includes("Updated iteration to") ||
+      logContent.includes("Detected valid promise tag"),
+    ).toBe(true);
   });
 
-  test("stop hook completed execution successfully", () => {
+  test("stop hook completed successfully (loop or completion)", () => {
     const logFile = path.join(WORKSPACE_HOST, ".e2e-logs", "babysitter-stop-hook.log");
     if (!fs.existsSync(logFile)) return;
 
     const logContent = fs.readFileSync(logFile, "utf-8");
-    expect(logContent).toContain("Hook execution successful");
+    // "Hook execution successful" is logged when the hook continues the loop.
+    // "Detected valid promise tag" is logged when the hook detects run completion
+    // and exits early (before reaching the "Hook execution successful" log line).
+    // Both indicate the hook executed its full logic path.
+    expect(
+      logContent.includes("Hook execution successful") ||
+      logContent.includes("Detected valid promise tag"),
+    ).toBe(true);
   });
 
   test("stop hook detected run completion", () => {
@@ -408,41 +420,25 @@ describe.skipIf(!HAS_API_KEY)("Stop hook verification", () => {
 // Session association verification
 // ---------------------------------------------------------------------------
 describe.skipIf(!HAS_API_KEY)("Session association verification", () => {
-  test("plugin state directory has session files", () => {
-    const stateDir = path.join(WORKSPACE_HOST, ".plugin-state");
-    if (!fs.existsSync(stateDir)) {
-      // If the state directory wasn't copied, check stdout for evidence
-      const logPath = path.join(ARTIFACTS_DIR, "e2e-stdout.log");
-      const stdout = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf-8") : "";
-      expect(stdout).toContain("Babysitter run activated");
-      return;
-    }
+  test("stop hook log proves session was found and associated with run", () => {
+    // The stop hook deletes session state files on completion, so we
+    // verify session association via the stop hook log instead.
+    const logFile = path.join(WORKSPACE_HOST, ".e2e-logs", "babysitter-stop-hook.log");
+    if (!fs.existsSync(logFile)) return;
 
-    const stateFiles = fs.readdirSync(stateDir).filter((f) => f.endsWith(".md"));
-    expect(stateFiles.length).toBeGreaterThanOrEqual(1);
+    const logContent = fs.readFileSync(logFile, "utf-8");
+    // The log should contain a session ID and a run ID, proving association
+    expect(logContent).toMatch(/session=[0-9a-f-]+/);
+    expect(logContent).toMatch(/run=[A-Z0-9]+/);
   });
 
-  test("session state file contains run ID", () => {
-    const stateDir = path.join(WORKSPACE_HOST, ".plugin-state");
-    if (!fs.existsSync(stateDir)) return;
-
-    const stateFiles = fs.readdirSync(stateDir).filter((f) => f.endsWith(".md"));
-    if (stateFiles.length === 0) return;
-
-    // At least one state file should reference a run ID
-    const hasRunRef = stateFiles.some((f) => {
-      const content = fs.readFileSync(path.join(stateDir, f), "utf-8");
-      return content.includes("runId");
-    });
-    expect(hasRunRef).toBe(true);
-  });
-
-  test("stdout shows babysitter orchestration was used", () => {
+  test("stdout shows orchestration completion with promise tag", () => {
     const logPath = path.join(ARTIFACTS_DIR, "e2e-stdout.log");
     if (!fs.existsSync(logPath)) return;
 
     const stdout = fs.readFileSync(logPath, "utf-8");
-    // Claude should have activated the babysitter run
-    expect(stdout).toContain("Babysitter run activated");
+    // Claude should have output the completion promise tag, proving
+    // the full orchestration loop ran to completion
+    expect(stdout).toContain("<promise>");
   });
 });
