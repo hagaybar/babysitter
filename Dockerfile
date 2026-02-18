@@ -53,7 +53,8 @@ RUN mkdir -p /home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128
 
 # Copy the babysitter plugin
 RUN cp -r plugins/babysitter/* /home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128/ && \
-    chmod +x /home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128/hooks/*.sh
+    chmod +x /home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128/hooks/*.sh && \
+    find /home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128/skills -name "*.sh" -exec chmod +x {} + 2>/dev/null || true
 
 # Create .claude-plugin metadata directory
 RUN mkdir -p /home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128/.claude-plugin && \
