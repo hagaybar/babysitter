@@ -68,6 +68,9 @@ jobs:
 
       - name: Run fixture & E2E orchestration tests
         if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        # E2E orchestration requires a valid API key; allow failure so
+        # structural/SDK/hook tests still gate the pipeline.
+        continue-on-error: true
         run: |
           set -euo pipefail
           npx vitest run --config e2e-tests/docker/vitest.config.ts \
