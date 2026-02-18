@@ -27,7 +27,7 @@ import {
   handleSessionCheckIteration,
 } from "./commands/session";
 import { handleSkillDiscover, handleSkillFetchRemote } from "./commands/skill";
-import { resolveCompletionSecret } from "./completionSecret";
+import { resolveCompletionProof } from "./completionProof";
 import {
   BabysitterRuntimeError,
   ErrorCategory,
@@ -348,7 +348,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       if (raw !== "github" && raw !== "well-known") {
         throw new Error(`--source-type must be "github" or "well-known" (received: ${raw})`);
       }
-      parsed.sourceType = raw as "github" | "well-known";
+      parsed.sourceType = raw;
       continue;
     }
     if (arg === "--url") {
@@ -846,21 +846,21 @@ async function handleRunStatus(parsed: ParsedArgs): Promise<number> {
   const state = deriveRunState(lastLifecycleEvent?.type, pendingTotal);
   const lastSummary = formatLastEventSummary(lastEvent);
   if (parsed.json) {
-    const completionSecret = state === "completed" ? resolveCompletionSecret(metadata) : null;
+    const completionProof = state === "completed" ? resolveCompletionProof(metadata) : null;
     console.log(
       JSON.stringify({
         state,
         lastEvent: lastEvent ? serializeJournalEvent(lastEvent, runDir) : null,
         pendingByKind,
         metadata: formattedMetadata.jsonMetadata ?? null,
-        completionSecret,
+        completionProof,
       })
     );
     return 0;
   }
   const suffix = formattedMetadata.textParts.length ? ` ${formattedMetadata.textParts.join(" ")}` : "";
-  const completionSecret = state === "completed" ? resolveCompletionSecret(metadata) : undefined;
-  const secretSuffix = completionSecret ? ` completionSecret=${completionSecret}` : "";
+  const completionProof = state === "completed" ? resolveCompletionProof(metadata) : undefined;
+  const secretSuffix = completionProof ? ` completionProof=${completionProof}` : "";
   console.log(`[run:status] state=${state} last=${lastSummary}${suffix}${secretSuffix}`);
   return 0;
 }
@@ -893,8 +893,8 @@ async function handleRunIterate(parsed: ParsedArgs): Promise<number> {
       const actionInfo = result.action ? ` action=${result.action}` : "";
       const progressInfo = result.iterationCount > 0 ? ` (${result.iterationCount} completed)` : "";
       console.log(`[run:iterate] iteration=${result.iteration}${progressInfo} status=${result.status}${actionInfo}${countInfo} reason=${result.reason}`);
-      if (result.status === "completed" && result.completionSecret) {
-        console.log(`[run:iterate] completionSecret=${result.completionSecret}`);
+      if (result.status === "completed" && result.completionProof) {
+        console.log(`[run:iterate] completionProof=${result.completionProof}`);
       }
 
       if (result.status === "waiting" && result.until) {

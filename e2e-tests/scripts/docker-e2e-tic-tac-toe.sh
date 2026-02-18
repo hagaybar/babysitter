@@ -398,10 +398,10 @@ run_test_eval "Stop hook increments iteration counter" \
   babysitter session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
   '
 
-# --- Test: Stop hook detects completion secret and allows exit ---
+# --- Test: Stop hook detects completion proof and allows exit ---
 HOOK_SECRET_SESSION="e2e-hook-secret-$(date +%s)"
 
-run_test_eval "Stop hook detects completion secret and allows exit" \
+run_test_eval "Stop hook detects completion proof and allows exit" \
   '
   SESSION_ID="'"$HOOK_SECRET_SESSION"'"
   STATE_DIR="'"$STATE_DIR"'"
@@ -413,14 +413,14 @@ run_test_eval "Stop hook detects completion secret and allows exit" \
 
   mkdir -p "$STATE_DIR" "$WORKSPACE/.a5c/runs/$RUN_ID/journal"
 
-  # Create a mock run.json with state:completed and a completionSecret
+  # Create a mock run.json with state:completed and a completionProof
   cat > "$WORKSPACE/.a5c/runs/$RUN_ID/run.json" <<RUNEOF
 {
   "runId": "$RUN_ID",
   "request": "test-request",
   "processId": "test-process",
   "state": "completed",
-  "completionSecret": "$SECRET",
+  "completionProof": "$SECRET",
   "layoutVersion": "2026.01-storage-preview",
   "createdAt": "2026-02-16T00:00:00.000Z"
 }

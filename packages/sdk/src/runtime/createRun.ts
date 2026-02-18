@@ -15,12 +15,12 @@ export async function createRun(options: CreateRunOptions): Promise<CreateRunRes
   const runDir = getRunDir(options.runsDir, runId);
   const normalizedEntrypoint = normalizeEntrypoint(runDir, options.process.importPath, options.process.exportName);
   const requestId = options.request ?? options.process.processId ?? runId;
-  const providedSecret =
-    typeof options.metadata?.completionSecret === "string" ? options.metadata.completionSecret : undefined;
-  const completionSecret = providedSecret ?? crypto.randomBytes(16).toString("hex");
+  const providedProof =
+    typeof options.metadata?.completionProof === "string" ? options.metadata.completionProof : undefined;
+  const completionProof = providedProof ?? crypto.randomBytes(16).toString("hex");
   const extraMetadata = {
     ...options.metadata,
-    completionSecret,
+    completionProof,
   };
   const { metadata } = await createRunDir({
     runsRoot: options.runsDir,

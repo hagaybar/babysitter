@@ -16,7 +16,7 @@ export interface RunMetadata extends JsonRecord {
   processRevision?: string;
   layoutVersion: string;
   createdAt: string;
-  completionSecret?: string;
+  completionProof?: string;
 }
 
 export interface CreateRunDirOptions {

@@ -546,9 +546,9 @@ This protection triggers if iterations average under 15 seconds. Ensure your wor
 
 The completion promise must match exactly:
 
-1. Check run status for `completionSecret`:
+1. Check run status for `completionProof`:
    ```bash
-   $CLI run:status <runId> --json | jq '.completionSecret'
+   $CLI run:status <runId> --json | jq '.completionProof'
    ```
 2. Verify output contains `<promise>SECRET</promise>` with exact match
 3. Whitespace is normalized but content must match
@@ -916,7 +916,7 @@ $CLI task:list <runId> --pending --json | jq '.tasks[] | select(.kind == "breakp
 
 A:
 1. Use `--max-iterations` to set a limit
-2. Output the completion secret: `<promise>SECRET</promise>`
+2. Output the completion proof: `<promise>SECRET</promise>`
 3. Delete the state file:
    ```bash
    rm plugins/babysitter/skills/babysit/state/<session-id>.md

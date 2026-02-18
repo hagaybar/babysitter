@@ -199,14 +199,14 @@ describe.skipIf(!HAS_API_KEY)("Orchestration lifecycle verification", () => {
     expect(runJson.createdAt).toBeDefined();
   });
 
-  test("run.json has completion secret", () => {
+  test("run.json has completion proof", () => {
     const runDir = getLatestRunDir();
     expect(runDir).not.toBeNull();
 
     const runJson = JSON.parse(fs.readFileSync(path.join(runDir!, "run.json"), "utf-8"));
-    expect(runJson.completionSecret).toBeDefined();
-    expect(typeof runJson.completionSecret).toBe("string");
-    expect(runJson.completionSecret.length).toBeGreaterThan(0);
+    expect(runJson.completionProof).toBeDefined();
+    expect(typeof runJson.completionProof).toBe("string");
+    expect(runJson.completionProof.length).toBeGreaterThan(0);
   });
 
   test("journal directory exists with entries", () => {

@@ -18,7 +18,7 @@ import { callRuntimeHook } from "../../runtime/hooks/runtime";
 import { orchestrateIteration } from "../../runtime/orchestrateIteration";
 import type { EffectAction } from "../../runtime/types";
 import type { JsonRecord } from "../../storage/types";
-import { resolveCompletionSecret } from "../completionSecret";
+import { resolveCompletionProof } from "../completionProof";
 
 export interface RunIterateOptions {
   runDir: string;
@@ -36,7 +36,7 @@ export interface RunIterateResult {
   count?: number;
   until?: number;
   nextActions?: EffectAction[];
-  completionSecret?: string;
+  completionProof?: string;
   metadata?: {
     runId: string;
     processId: string;
@@ -66,7 +66,7 @@ export async function runIterate(options: RunIterateOptions): Promise<RunIterate
   const iterationResult = await orchestrateIteration({ runDir });
 
   if (iterationResult.status === "completed") {
-    const completionSecret = resolveCompletionSecret(metadata);
+    const completionProof = resolveCompletionProof(metadata);
     await callRuntimeHook(
       "on-iteration-end",
       {
@@ -85,7 +85,7 @@ export async function runIterate(options: RunIterateOptions): Promise<RunIterate
       status: "completed",
       action: "none",
       reason: "completed",
-      completionSecret,
+      completionProof,
       metadata: { runId, processId: metadata.processId, hookStatus: "executed" },
     };
   }

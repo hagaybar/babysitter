@@ -150,12 +150,12 @@ describe("Stop hook lifecycle", () => {
     dockerExec(`rm -f ${transcriptFile}`);
   });
 
-  test("detects completion secret and allows exit", () => {
+  test("detects completion proof and allows exit", () => {
     const sid = "complete-" + Date.now();
     const runDir = "/tmp/hook-test-run";
     const transcriptFile = "/tmp/hook-transcript-complete.jsonl";
 
-    // The SDK derives completionSecret from runId via sha256("runId:babysitter-completion-secret-v1")
+    // The SDK derives completionProof from runId via sha256("runId:babysitter-completion-secret-v1")
     // For runId "test-run" the derived secret is:
     const secret =
       "db5801f37401e3b014de18ccd168d317c96e3c4154702cfd5ab38d507608da17";

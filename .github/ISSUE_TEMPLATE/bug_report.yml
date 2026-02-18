@@ -17,15 +17,7 @@ body:
       placeholder: "e.g. 0.0.6 (babysitter-0.0.6.vsix)"
     validations:
       required: true
-
-  - type: input
-    id: vscode
-    attributes:
-      label: VS Code version
-      placeholder: "e.g. 1.95.0"
-    validations:
-      required: true
-
+      
   - type: input
     id: os
     attributes:

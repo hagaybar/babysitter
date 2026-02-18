@@ -212,7 +212,7 @@ babysitter run:status <runId> [--json]
       "node": 2
     }
   },
-  "completionSecret": "..." // Only present when state=completed
+  "completionProof": "..." // Only present when state=completed
 }
 ```
 
@@ -345,7 +345,7 @@ babysitter run:iterate <runId> \
     "hookStatus": "executed",
     "stateVersion": 45
   },
-  "completionSecret": "..." // Only present when status=completed
+  "completionProof": "..." // Only present when status=completed
 }
 ```
 

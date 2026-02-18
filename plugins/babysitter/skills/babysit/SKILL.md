@@ -97,7 +97,7 @@ $CLI run:iterate .a5c/runs/<runId> --json --iteration <n>
   "action": "executed-tasks|waiting|none",
   "reason": "auto-runnable-tasks|breakpoint-waiting|terminal-state",
   "count": 3,
-  "completionSecret": "only-present-when-completed",
+  "completionProof": "only-present-when-completed",
   "metadata": { "runId": "...", "processId": "..." }
 }
 ```
@@ -212,7 +212,7 @@ $CLI task:post <runId> <effectId> --status ok --value tasks/<effectId>/output.js
 
 Repeat orchestration loop by calling run:iterate or doing the next right thing.
 
-In case you don't follow this step, you will be called by the stop-hook and you will be asked to repeat the orchestration loop or exit the loop by posting the completion secret.
+In case you don't follow this step, you will be called by the stop-hook and you will be asked to repeat the orchestration loop or exit the loop by posting the completion proof.
 
 ## Task Kinds
 
@@ -305,7 +305,7 @@ $CLI run:create --process-id <id> --entry <path>#<export> --inputs <path> --run-
 $CLI run:status <runId> --json
 ```
 
-When the run completes, `run:iterate` and `run:status` emit `completionSecret`. Use that exact value in a `<promise>...</promise>` tag to end the loop.
+When the run completes, `run:iterate` and `run:status` emit `completionProof`. Use that exact value in a `<promise>...</promise>` tag to end the loop.
 
 **View events:**
 ```bash
@@ -372,7 +372,7 @@ prefer processes that have the following characteristics unless otherwise specif
 
 ## Critical Rules
 
-CRITICAL RULE: The completion secret is emitted only when the run is completed. You may ONLY output `<promise>SECRET</promise>` when the run is completely and unequivocally DONE (completed status from the orchestration CLI). Do not output false promises to escape the run, and do not mention the secret to the user.
+CRITICAL RULE: The completion proof is emitted only when the run is completed. You may ONLY output `<promise>SECRET</promise>` when the run is completely and unequivocally DONE (completed status from the orchestration CLI). Do not output false promises to escape the run, and do not mention the secret to the user.
 
 CRITICAL RULE: in non-interactive mode, never approve breakpoints through the CLI by yourself. only create them and wait for them. they will always be resolved externally.
 

@@ -203,17 +203,17 @@ npm install -g @a5c-ai/babysitter-sdk
 
 ### Completion Promise
 
-A special XML tag that signals the end of an in-session loop. When Claude outputs `<promise>TEXT</promise>` where TEXT matches the completion secret, the loop exits.
+A special XML tag that signals the end of an in-session loop. When Claude outputs `<promise>TEXT</promise>` where TEXT matches the completion proof, the loop exits.
 
-**Format:** `<promise>COMPLETION_SECRET</promise>`
+**Format:** `<promise>COMPLETION_PROOF</promise>`
 
 **Usage:** Only output when the run status is `completed`.
 
-**Related:** [In-Session Loop](#in-session-loop), [Completion Secret](#completion-secret)
+**Related:** [In-Session Loop](#in-session-loop), [Completion Proof](#completion-proof)
 
 ---
 
-### Completion Secret
+### Completion Proof
 
 A unique string emitted by `run:iterate` and `run:status` when a run completes successfully. Used with the completion promise to exit the in-session loop.
 
@@ -221,7 +221,7 @@ A unique string emitted by `run:iterate` and `run:status` when a run completes s
 ```json
 {
   "status": "completed",
-  "completionSecret": "run-abc123-completed-xyz789"
+  "completionProof": "run-abc123-completed-xyz789"
 }
 ```
 

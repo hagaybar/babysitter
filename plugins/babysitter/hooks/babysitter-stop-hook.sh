@@ -180,7 +180,7 @@ if [[ -z "$LAST_OUTPUT" ]]; then
 fi
 
 # If we have a run_id, check run state from the SDK.
-COMPLETION_SECRET=""
+COMPLETION_PROOF=""
 RUN_STATE=""
 PENDING_KINDS=""
 if [[ -n "${RUN_ID:-}" ]]; then
@@ -194,17 +194,17 @@ if [[ -n "${RUN_ID:-}" ]]; then
     exit 0
   fi
   if [[ "$RUN_STATE" == "completed" ]]; then
-    COMPLETION_SECRET=$(echo "$RUN_STATUS" | jq -r '.completionSecret // empty')
-    _log_info "Completion secret available" "$SESSION_ID" "$RUN_ID"
+    COMPLETION_PROOF=$(echo "$RUN_STATUS" | jq -r '.completionProof // empty')
+    _log_info "Completion proof available" "$SESSION_ID" "$RUN_ID"
   fi
   _log_info "Pending kinds: $PENDING_KINDS" "$SESSION_ID" "$RUN_ID"
 fi
 
-# If a completion secret is available, require the matching <promise> tag to exit.
-if [[ -n "$COMPLETION_SECRET" ]]; then
+# If a completion proof is available, require the matching <promise> tag to exit.
+if [[ -n "$COMPLETION_PROOF" ]]; then
   # Extract text from <promise> tags using Perl for multiline support
   PROMISE_TEXT=$(echo "$LAST_OUTPUT" | perl -0777 -pe 's/.*?<promise>(.*?)<\/promise>.*/$1/s; s/^\s+|\s+$//g; s/\s+/ /g' 2>/dev/null || echo "")
-  if [[ -n "$PROMISE_TEXT" ]] && [[ "$PROMISE_TEXT" = "$COMPLETION_SECRET" ]]; then
+  if [[ -n "$PROMISE_TEXT" ]] && [[ "$PROMISE_TEXT" = "$COMPLETION_PROOF" ]]; then
     _log_info "Detected valid promise tag - run complete" "$SESSION_ID" "$RUN_ID"
     $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
     exit 0
@@ -239,8 +239,8 @@ UPDATE_RESULT=$($CLI "${UPDATE_ARGS[@]}" 2>&1) || {
 _log_info "Updated iteration to $NEXT_ITERATION" "$SESSION_ID" "$RUN_ID"
 
 # Build system message with iteration count and status info
-if [[ -n "$COMPLETION_SECRET" ]]; then
-  SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Run completed! To finish: agent must call 'run:status --json' on your run, extract 'completionSecret' from the output, then output it in <promise>SECRET</promise> tags. Do not mention or reveal the secret otherwise."
+if [[ -n "$COMPLETION_PROOF" ]]; then
+  SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Run completed! To finish: agent must call 'run:status --json' on your run, extract 'completionProof' from the output, then output it in <promise>SECRET</promise> tags. Do not mention or reveal the secret otherwise."
 elif [[ "$RUN_STATE" == "waiting" ]] && [[ -n "$PENDING_KINDS" ]]; then
   SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Waiting on: $PENDING_KINDS. Check if pending effects are resolved, then call run:iterate."
 elif [[ "$RUN_STATE" == "failed" ]]; then

@@ -10,7 +10,7 @@ import { createRunDir } from "../../storage/createRunDir";
 import { createStateCacheSnapshot, writeStateCache } from "../../runtime/replay/stateCache";
 import * as orchestrateIterationModule from "../../runtime/orchestrateIteration";
 import * as runFilesModule from "../../storage/runFiles";
-import { deriveCompletionSecret } from "../completionSecret";
+import { deriveCompletionProof } from "../completionProof";
 
 const realReadRunMetadata = readRunMetadata;
 
@@ -260,7 +260,7 @@ describe("run lifecycle inspection commands", () => {
       expect(payload.lastEvent.path).toMatch(/^journal\//);
     });
 
-    it("derives a completion secret for completed runs without stored metadata", async () => {
+    it("derives a completion proof for completed runs without stored metadata", async () => {
       const runId = "run-complete";
       const runDir = await createRunSkeleton(runId);
       await appendEvent({
@@ -274,7 +274,7 @@ describe("run lifecycle inspection commands", () => {
       expect(exitCode).toBe(0);
       const payload = readLastJson(logSpy);
       expect(payload.state).toBe("completed");
-      expect(payload.completionSecret).toBe(deriveCompletionSecret(runId));
+      expect(payload.completionProof).toBe(deriveCompletionProof(runId));
     });
 
     it("includes iteration metadata in JSON output", async () => {
