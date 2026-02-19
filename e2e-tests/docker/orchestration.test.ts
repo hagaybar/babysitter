@@ -86,8 +86,11 @@ describe.skipIf(!HAS_API_KEY)("Full E2E orchestration (tic-tac-toe)", () => {
         "cp -rn /home/claude/.a5c/* /workspace/.a5c/ 2>/dev/null || true",
         // Copy the full Claude session transcript (JSONL) — this is the
         // definitive record of every tool call Claude made during the run.
+        // chmod after copy because the files are owned by container's claude
+        // user which has a different UID than the CI runner.
         "mkdir -p /workspace/.claude-session",
         "cp -r /home/claude/.claude/projects/* /workspace/.claude-session/ 2>/dev/null || true",
+        "chmod -R 777 /workspace/.claude-session 2>/dev/null || true",
         // Copy plugin state directories for session verification
         "mkdir -p /workspace/.plugin-state",
         `cp -r ${PLUGIN_DIR}/skills/babysit/state/* /workspace/.plugin-state/ 2>/dev/null || true`,
@@ -361,7 +364,10 @@ function findTranscriptFiles(): string[] {
   if (!fs.existsSync(sessionDir)) return [];
   const results: string[] = [];
   function walk(dir: string) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { return; } // skip dirs we can't read (permission issues)
+    for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith(".jsonl")) results.push(full);
