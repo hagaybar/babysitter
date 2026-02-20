@@ -18,6 +18,8 @@ export interface SkillCommandArgs {
   url?: string;
   json: boolean;
   runsDir?: string;
+  includeRemote?: boolean;
+  summaryOnly?: boolean;
 }
 
 /**
@@ -250,37 +252,39 @@ function sortSkillsByDomain(skills: SkillMetadata[], domain: string): SkillMetad
 }
 
 /**
- * Handle skill:discover command.
- * Scans for available skills in plugin and repo directories.
+ * Result from internal skill discovery.
  */
-export async function handleSkillDiscover(args: SkillCommandArgs): Promise<number> {
+export interface DiscoverSkillsResult {
+  skills: SkillMetadata[];
+  summary: string;
+  cached: boolean;
+}
+
+/**
+ * Internal skill discovery logic, extracted for reuse by other CLI commands
+ * (e.g. session:iteration-message).
+ *
+ * Returns a structured result instead of writing to stdout.
+ */
+export async function discoverSkillsInternal(options: {
+  pluginRoot: string;
+  runId?: string;
+  cacheTtl?: number;
+  runsDir?: string;
+  includeRemote?: boolean;
+}): Promise<DiscoverSkillsResult> {
   const {
     pluginRoot,
     runId = '',
     cacheTtl = DEFAULT_CACHE_TTL,
     runsDir = '.a5c/runs',
-    json,
-  } = args;
-
-  if (!pluginRoot) {
-    const error = { error: 'MISSING_PLUGIN_ROOT', message: '--plugin-root is required' };
-    if (json) {
-      console.error(JSON.stringify(error));
-    } else {
-      console.error('❌ Error: --plugin-root is required');
-    }
-    return 1;
-  }
+    includeRemote = false,
+  } = options;
 
   // Check cache first
   const cached = await readCache(runId, cacheTtl);
   if (cached) {
-    if (json) {
-      console.log(JSON.stringify({ skills: cached.skills, summary: cached.summary, cached: true }));
-    } else {
-      console.log(cached.summary);
-    }
-    return 0;
+    return { skills: cached.skills, summary: cached.summary, cached: true };
   }
 
   // Detect domain from run
@@ -311,6 +315,12 @@ export async function handleSkillDiscover(args: SkillCommandArgs): Promise<numbe
     // Repo skills dir doesn't exist, skip
   }
 
+  // 4. Optionally fetch remote skills
+  if (includeRemote) {
+    const remoteSkills = await fetchRemoteSkillSources(pluginRoot);
+    allSkills.push(...remoteSkills);
+  }
+
   // Deduplicate and sort
   let skills = deduplicateSkills(allSkills);
   skills = sortSkillsByDomain(skills, domain);
@@ -329,10 +339,101 @@ export async function handleSkillDiscover(args: SkillCommandArgs): Promise<numbe
   };
   await writeCache(runId, cacheEntry);
 
+  return { skills, summary, cached: false };
+}
+
+/**
+ * Fetch skills from remote sources defined in .a5c/skill-sources.json
+ * and a default GitHub source.
+ */
+async function fetchRemoteSkillSources(_pluginRoot: string): Promise<SkillMetadata[]> {
+  const remoteSkills: SkillMetadata[] = [];
+
+  // Default external source
+  interface SkillSource {
+    type: 'github' | 'well-known';
+    url: string;
+  }
+  const sources: SkillSource[] = [
+    { type: 'github', url: 'https://github.com/MaTriXy/babysitter/tree/main/plugins/babysitter/skills' },
+  ];
+
+  // Check for additional sources in .a5c/skill-sources.json
+  try {
+    const content = await fs.readFile('.a5c/skill-sources.json', 'utf8');
+    const parsed = JSON.parse(content) as { sources?: Array<{ type: string; url: string }> };
+    if (parsed.sources && Array.isArray(parsed.sources)) {
+      for (const s of parsed.sources) {
+        if ((s.type === 'github' || s.type === 'well-known') && typeof s.url === 'string') {
+          sources.push({ type: s.type, url: s.url });
+        }
+      }
+    }
+  } catch {
+    // No external sources file, that's fine
+  }
+
+  for (const source of sources) {
+    try {
+      let skills: SkillMetadata[] = [];
+      if (source.type === 'github') {
+        skills = await discoverGitHub(source.url);
+      } else if (source.type === 'well-known') {
+        skills = await discoverWellKnown(source.url);
+      }
+      remoteSkills.push(...skills);
+    } catch {
+      // Skip failed remote sources
+    }
+  }
+
+  return remoteSkills;
+}
+
+/**
+ * Handle skill:discover command.
+ * Scans for available skills in plugin and repo directories.
+ * Thin wrapper around discoverSkillsInternal that handles CLI I/O.
+ */
+export async function handleSkillDiscover(args: SkillCommandArgs): Promise<number> {
+  const {
+    pluginRoot,
+    runId,
+    cacheTtl,
+    runsDir,
+    json,
+    includeRemote,
+    summaryOnly,
+  } = args;
+
+  if (!pluginRoot) {
+    const error = { error: 'MISSING_PLUGIN_ROOT', message: '--plugin-root is required' };
+    if (json) {
+      console.error(JSON.stringify(error));
+    } else {
+      console.error('❌ Error: --plugin-root is required');
+    }
+    return 1;
+  }
+
+  const result = await discoverSkillsInternal({
+    pluginRoot,
+    runId,
+    cacheTtl,
+    runsDir,
+    includeRemote,
+  });
+
+  if (summaryOnly) {
+    // Output just the summary string, no JSON wrapper
+    console.log(result.summary || '');
+    return 0;
+  }
+
   if (json) {
-    console.log(JSON.stringify({ skills, summary, cached: false }));
+    console.log(JSON.stringify({ skills: result.skills, summary: result.summary, cached: result.cached }));
   } else {
-    console.log(summary || '(no skills found)');
+    console.log(result.summary || '(no skills found)');
   }
 
   return 0;

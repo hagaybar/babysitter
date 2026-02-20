@@ -81,100 +81,60 @@ STATE_DIR="$PLUGIN_ROOT/skills/babysit/state"
 CLI="${CLI:-npx -y @a5c-ai/babysitter-sdk@latest}"
 BABYSITTER_STATE_FILE="$STATE_DIR/${SESSION_ID}.md"
 
-# Use CLI to read session state (replaces sed/grep frontmatter parsing)
-STATE_RESULT=$($CLI session:state --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --json 2>&1) || {
-  _log_warn "4002" "$SESSION_ID" "" "Failed to read session state: $STATE_RESULT"
+# Single CLI call replaces both session:state and session:check-iteration
+CHECK_RESULT=$($CLI session:check-iteration --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --json 2>&1) || {
+  _log_warn "4002" "$SESSION_ID" "" "Failed to check iteration: $CHECK_RESULT"
   exit 0
 }
 
 # Check if session exists
-FOUND=$(echo "$STATE_RESULT" | jq -r '.found // false')
+FOUND=$(echo "$CHECK_RESULT" | jq -r '.found // false')
 if [[ "$FOUND" != "true" ]]; then
   # No active loop - allow exit
   _log_info "No active loop found" "$SESSION_ID" ""
   exit 0
 fi
 
-# Extract state fields from JSON
-ITERATION=$(echo "$STATE_RESULT" | jq -r '.state.iteration // 1')
-MAX_ITERATIONS=$(echo "$STATE_RESULT" | jq -r '.state.maxIterations // 256')
-RUN_ID=$(echo "$STATE_RESULT" | jq -r '.state.runId // empty')
-PROMPT_TEXT=$(echo "$STATE_RESULT" | jq -r '.prompt // empty')
-
-# Use CLI to check iteration limits and timing (replaces bash timing logic)
-CHECK_RESULT=$($CLI session:check-iteration --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --json 2>&1) || {
-  _log_warn "3002" "$SESSION_ID" "$RUN_ID" "Failed to check iteration: $CHECK_RESULT"
-  # Continue anyway - we'll handle errors below
-  CHECK_RESULT='{"shouldContinue": true}'
-}
-
-SHOULD_CONTINUE=$(echo "$CHECK_RESULT" | jq -r '.shouldContinue // true')
-STOP_REASON=$(echo "$CHECK_RESULT" | jq -r '.reason // empty')
+# Extract all fields from the single CHECK_RESULT
+SHOULD_CONTINUE=$(echo "$CHECK_RESULT" | jq -r 'if .shouldContinue == false then "false" else "true" end')
+ITERATION=$(echo "$CHECK_RESULT" | jq -r '.iteration // 1')
+MAX_ITERATIONS=$(echo "$CHECK_RESULT" | jq -r '.maxIterations // 256')
+RUN_ID=$(echo "$CHECK_RESULT" | jq -r '.runId // empty')
+PROMPT_TEXT=$(echo "$CHECK_RESULT" | jq -r '.prompt // empty')
 
 if [[ "$SHOULD_CONTINUE" != "true" ]]; then
-  case "$STOP_REASON" in
-    "max_iterations_reached")
-      _log_warn "3005" "$SESSION_ID" "$RUN_ID" "Max iterations ($MAX_ITERATIONS) reached"
-      ;;
-    "iteration_too_fast")
-      AVG_TIME=$(echo "$CHECK_RESULT" | jq -r '.averageTime // 0')
-      _log_warn "3002" "$SESSION_ID" "$RUN_ID" "Average iteration time too fast (${AVG_TIME}s <= 15s)"
-      ;;
-    "session_not_found")
-      _log_warn "4002" "$SESSION_ID" "$RUN_ID" "Session not found"
-      ;;
-    *)
-      _log_warn "3002" "$SESSION_ID" "$RUN_ID" "Stopping due to: $STOP_REASON"
-      ;;
-  esac
+  STOP_MSG=$(echo "$CHECK_RESULT" | jq -r '.stopMessage // empty')
+  STOP_REASON=$(echo "$CHECK_RESULT" | jq -r '.reason // empty')
+  _log_warn "3002" "$SESSION_ID" "$RUN_ID" "$STOP_MSG"
   # Delete session state file
   $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
   _log_info "Session stopped ($STOP_REASON)" "$SESSION_ID" "$RUN_ID"
   exit 0
 fi
 
-# Get transcript path from hook input
+# Get transcript path from hook input and parse last assistant message via CLI
 TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | jq -r '.transcript_path')
 
-if [[ ! -f "$TRANSCRIPT_PATH" ]]; then
-  _log_error "4002" "$SESSION_ID" "$RUN_ID" "Transcript file not found: $TRANSCRIPT_PATH"
+TRANSCRIPT_RESULT=$($CLI session:last-message --transcript-path "$TRANSCRIPT_PATH" --json 2>/dev/null) || {
+  _log_error "5004" "$SESSION_ID" "$RUN_ID" "session:last-message CLI failed"
+  $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
+  exit 0
+}
+
+TRANSCRIPT_FOUND=$(echo "$TRANSCRIPT_RESULT" | jq -r '.found // false')
+TRANSCRIPT_ERROR=$(echo "$TRANSCRIPT_RESULT" | jq -r '.error // empty')
+LAST_OUTPUT=$(echo "$TRANSCRIPT_RESULT" | jq -r '.text // empty')
+HAS_PROMISE=$(echo "$TRANSCRIPT_RESULT" | jq -r '.hasPromise // false')
+PROMISE_TEXT=$(echo "$TRANSCRIPT_RESULT" | jq -r '.promiseValue // empty')
+
+if [[ -n "$TRANSCRIPT_ERROR" ]]; then
+  _log_error "4002" "$SESSION_ID" "$RUN_ID" "Transcript error: $TRANSCRIPT_ERROR path=$TRANSCRIPT_PATH"
   $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
   exit 0
 fi
 
-# Read last assistant message from transcript (JSONL format - one JSON per line)
-# First check if there are any assistant messages
-if ! grep -q '"role":"assistant"' "$TRANSCRIPT_PATH"; then
-  _log_error "5004" "$SESSION_ID" "$RUN_ID" "No assistant messages in transcript: $TRANSCRIPT_PATH"
-  $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
-  exit 0
-fi
-
-# Extract last assistant message with explicit error handling
-LAST_LINE=$(grep '"role":"assistant"' "$TRANSCRIPT_PATH" | tail -1)
-if [[ -z "$LAST_LINE" ]]; then
-  _log_error "5004" "$SESSION_ID" "$RUN_ID" "Failed to extract last assistant message"
-  $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
-  exit 0
-fi
-
-# Parse JSON with error handling
-LAST_OUTPUT=$(echo "$LAST_LINE" | jq -r '
-  .message.content |
-  map(select(.type == "text")) |
-  map(.text) |
-  join("\n")
-' 2>&1)
-
-# Check if jq succeeded
-if [[ $? -ne 0 ]]; then
-  _log_error "5004" "$SESSION_ID" "$RUN_ID" "Failed to parse assistant message JSON: $LAST_OUTPUT"
-  $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
-  exit 0
-fi
-
-if [[ -z "$LAST_OUTPUT" ]]; then
-  _log_error "5004" "$SESSION_ID" "$RUN_ID" "Assistant message contained no text content"
+if [[ "$TRANSCRIPT_FOUND" != "true" ]] || [[ -z "$LAST_OUTPUT" ]]; then
+  _log_error "5004" "$SESSION_ID" "$RUN_ID" "No assistant text content found in transcript: $TRANSCRIPT_PATH"
   $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
   exit 0
 fi
@@ -202,9 +162,8 @@ fi
 
 # If a completion proof is available, require the matching <promise> tag to exit.
 if [[ -n "$COMPLETION_PROOF" ]]; then
-  # Extract text from <promise> tags using Perl for multiline support
-  PROMISE_TEXT=$(echo "$LAST_OUTPUT" | perl -0777 -pe 's/.*?<promise>(.*?)<\/promise>.*/$1/s; s/^\s+|\s+$//g; s/\s+/ /g' 2>/dev/null || echo "")
-  if [[ -n "$PROMISE_TEXT" ]] && [[ "$PROMISE_TEXT" = "$COMPLETION_PROOF" ]]; then
+  # Promise text already extracted by session:last-message CLI above
+  if [[ "$HAS_PROMISE" == "true" ]] && [[ -n "$PROMISE_TEXT" ]] && [[ "$PROMISE_TEXT" = "$COMPLETION_PROOF" ]]; then
     _log_info "Detected valid promise tag - run complete" "$SESSION_ID" "$RUN_ID"
     $CLI session:update --session-id "$SESSION_ID" --state-dir "$STATE_DIR" --delete --json >/dev/null 2>&1 || true
     exit 0
@@ -238,20 +197,23 @@ UPDATE_RESULT=$($CLI "${UPDATE_ARGS[@]}" 2>&1) || {
 }
 _log_info "Updated iteration to $NEXT_ITERATION" "$SESSION_ID" "$RUN_ID"
 
-# Build system message with iteration count and status info
-if [[ -n "$COMPLETION_PROOF" ]]; then
-  SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Run completed! To finish: agent must call 'run:status --json' on your run, extract 'completionProof' from the output, then output it in <promise>SECRET</promise> tags. Do not mention or reveal the secret otherwise."
-elif [[ "$RUN_STATE" == "waiting" ]] && [[ -n "$PENDING_KINDS" ]]; then
-  SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Waiting on: $PENDING_KINDS. Check if pending effects are resolved, then call run:iterate."
-elif [[ "$RUN_STATE" == "failed" ]]; then
-  SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Failed. agent must fix the run, journal or process (inspect the sdk.md if needed) and proceed."
-else
+# Build system message via CLI (replaces bash branching + skill-context-resolver)
+ITER_MSG_ARGS=("session:iteration-message" "--iteration" "$NEXT_ITERATION")
+if [[ -n "${RUN_ID:-}" ]]; then
+  ITER_MSG_ARGS+=("--run-id" "$RUN_ID")
+fi
+if [[ -n "${PLUGIN_ROOT:-}" ]]; then
+  ITER_MSG_ARGS+=("--plugin-root" "$PLUGIN_ROOT")
+fi
+ITER_MSG_ARGS+=("--json")
+ITER_MSG_RESULT=$($CLI "${ITER_MSG_ARGS[@]}" 2>/dev/null) || ITER_MSG_RESULT=''
+if [[ -n "$ITER_MSG_RESULT" ]]; then
+  SYSTEM_MSG=$(echo "$ITER_MSG_RESULT" | jq -r '.systemMessage // empty')
+fi
+if [[ -z "${SYSTEM_MSG:-}" ]]; then
   SYSTEM_MSG="🔄 Babysitter iteration $NEXT_ITERATION | Agent should continue orchestration (run:iterate)"
 fi
-
-# ─────────────────────────────────────────────────
-# Inject available skill context into system message
-# ─────────────────────────────────────────────────
+# Inject available skill context into system message (until M8 moves this into CLI)
 SKILL_CONTEXT=""
 SKILL_RESOLVER="$PLUGIN_ROOT/hooks/skill-context-resolver.sh"
 if [[ -x "$SKILL_RESOLVER" ]]; then

@@ -168,7 +168,7 @@ fi
 INIT_RESULT=$($CLI "${CLI_ARGS[@]}" 2>&1) || {
   # Parse error from JSON output if possible
   if echo "$INIT_RESULT" | grep -q '"error"'; then
-    ERROR_MSG=$(echo "$INIT_RESULT" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
+    ERROR_MSG=$(echo "$INIT_RESULT" | jq -r '.message // empty')
     echo "❌ Error: ${ERROR_MSG:-Session initialization failed}" >&2
   else
     echo "❌ Error: Session initialization failed" >&2
@@ -178,7 +178,7 @@ INIT_RESULT=$($CLI "${CLI_ARGS[@]}" 2>&1) || {
 }
 
 # Extract state file path from JSON output
-BABYSITTER_STATE_FILE=$(echo "$INIT_RESULT" | sed -n 's/.*"stateFile":"\([^"]*\)".*/\1/p')
+BABYSITTER_STATE_FILE=$(echo "$INIT_RESULT" | jq -r '.stateFile // empty')
 if [[ -z "$BABYSITTER_STATE_FILE" ]]; then
   BABYSITTER_STATE_FILE="$STATE_DIR/${CLAUDE_SESSION_ID}.md"
 fi

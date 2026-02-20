@@ -16,6 +16,7 @@ import { loadJournal } from "../storage/journal";
 import { readRunMetadata } from "../storage/runFiles";
 import type { JournalEvent, RunMetadata, StoredTaskResult } from "../storage/types";
 import { runIterate } from "./commands/runIterate";
+import { runExecuteTasks } from "./commands/runExecuteTasks";
 import { handleHealthCommand } from "./commands/health";
 import { handleConfigureCommand } from "./commands/configure";
 import {
@@ -25,8 +26,11 @@ import {
   handleSessionState,
   handleSessionUpdate,
   handleSessionCheckIteration,
+  handleSessionLastMessage,
+  handleSessionIterationMessage,
 } from "./commands/session";
 import { handleSkillDiscover, handleSkillFetchRemote } from "./commands/skill";
+import { handleHookLog } from "./commands/hookLog";
 import { resolveCompletionProof } from "./completionProof";
 import {
   BabysitterRuntimeError,
@@ -45,6 +49,7 @@ const USAGE = `Usage:
   babysitter run:rebuild-state <runDir> [--runs-dir <dir>] [--json] [--dry-run]
   babysitter run:repair-journal <runDir> [--runs-dir <dir>] [--json] [--dry-run]
   babysitter run:iterate <runDir> [--runs-dir <dir>] [--json] [--verbose] [--iteration <n>]
+  babysitter run:execute-tasks <runDir> [--runs-dir <dir>] [--json] [--verbose] [--dry-run] [--max-tasks <n>] [--kind <kind>] [--timeout <ms>]
   babysitter task:post <runDir> <effectId> --status <ok|error> [--runs-dir <dir>] [--json] [--dry-run] [--value <file>] [--error <file>] [--stdout-ref <ref>] [--stderr-ref <ref>] [--stdout-file <file>] [--stderr-file <file>] [--started-at <iso8601>] [--finished-at <iso8601>] [--metadata <file>] [--invocation-key <key>]
   babysitter task:list <runDir> [--runs-dir <dir>] [--pending] [--kind <kind>] [--json]
   babysitter task:show <runDir> <effectId> [--runs-dir <dir>] [--json]
@@ -54,7 +59,10 @@ const USAGE = `Usage:
   babysitter session:state --session-id <id> --state-dir <dir> [--json]
   babysitter session:update --session-id <id> --state-dir <dir> [--iteration <n>] [--last-iteration-at <iso8601>] [--iteration-times <csv>] [--delete] [--json]
   babysitter session:check-iteration --session-id <id> --state-dir <dir> [--json]
-  babysitter skill:discover --plugin-root <dir> [--run-id <id>] [--cache-ttl <seconds>] [--runs-dir <dir>] [--json]
+  babysitter session:last-message --transcript-path <file> [--json]
+  babysitter session:iteration-message --iteration <n> [--run-id <id>] [--runs-dir <dir>] [--plugin-root <dir>] [--json]
+  babysitter skill:discover --plugin-root <dir> [--run-id <id>] [--cache-ttl <seconds>] [--runs-dir <dir>] [--include-remote] [--summary-only] [--json]
+  babysitter hook:log --hook-type <type> --log-file <path> [--json]
   babysitter skill:fetch-remote --source-type <github|well-known> --url <url> [--json]
   babysitter health [--json] [--verbose]
   babysitter configure [show|validate|paths] [--json] [--defaults-only]
@@ -112,11 +120,21 @@ interface ParsedArgs {
   lastIterationAt?: string;
   iterationTimes?: string;
   deleteSession?: boolean;
+  // run:execute-tasks args
+  maxTasks?: number;
+  timeout?: number;
+  // session:last-message args
+  transcriptPath?: string;
+  // Hook log command args
+  hookType?: string;
+  logFile?: string;
   // Skill command args
   pluginRoot?: string;
   cacheTtl?: number;
   sourceType?: "github" | "well-known";
   url?: string;
+  includeRemote?: boolean;
+  summaryOnly?: boolean;
 }
 
 interface ActionSummary {
@@ -329,8 +347,31 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.iterationTimes = expectFlagValue(rest, ++i, "--iteration-times");
       continue;
     }
+    if (arg === "--max-tasks") {
+      const raw = expectFlagValue(rest, ++i, "--max-tasks");
+      parsed.maxTasks = parsePositiveInteger(raw, "--max-tasks");
+      continue;
+    }
+    if (arg === "--timeout") {
+      const raw = expectFlagValue(rest, ++i, "--timeout");
+      parsed.timeout = parsePositiveInteger(raw, "--timeout");
+      continue;
+    }
     if (arg === "--delete") {
       parsed.deleteSession = true;
+      continue;
+    }
+    if (arg === "--transcript-path") {
+      parsed.transcriptPath = expectFlagValue(rest, ++i, "--transcript-path");
+      continue;
+    }
+    // Hook log command flags
+    if (arg === "--hook-type") {
+      parsed.hookType = expectFlagValue(rest, ++i, "--hook-type");
+      continue;
+    }
+    if (arg === "--log-file") {
+      parsed.logFile = expectFlagValue(rest, ++i, "--log-file");
       continue;
     }
     // Skill command flags
@@ -355,6 +396,14 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.url = expectFlagValue(rest, ++i, "--url");
       continue;
     }
+    if (arg === "--include-remote") {
+      parsed.includeRemote = true;
+      continue;
+    }
+    if (arg === "--summary-only") {
+      parsed.summaryOnly = true;
+      continue;
+    }
     positionals.push(arg);
   }
   if (parsed.command === "task:post") {
@@ -368,6 +417,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   } else if (parsed.command === "run:iterate") {
     [parsed.runDirArg] = positionals;
   } else if (parsed.command === "run:events") {
+    [parsed.runDirArg] = positionals;
+  } else if (parsed.command === "run:execute-tasks") {
     [parsed.runDirArg] = positionals;
   } else if (parsed.command === "run:rebuild-state") {
     [parsed.runDirArg] = positionals;
@@ -845,6 +896,15 @@ async function handleRunStatus(parsed: ParsedArgs): Promise<number> {
   const lastLifecycleEvent = findLastLifecycleEvent(journal);
   const state = deriveRunState(lastLifecycleEvent?.type, pendingTotal);
   const lastSummary = formatLastEventSummary(lastEvent);
+
+  const autoRunnableCount = pendingRecords.filter(r => r.kind === "node").length;
+  const pendingEffectsSummary = {
+    totalPending: pendingTotal,
+    countsByKind: pendingByKind,
+    autoRunnableCount,
+  };
+  const needsMoreIterations = state === "waiting" && autoRunnableCount > 0;
+
   if (parsed.json) {
     const completionProof = state === "completed" ? resolveCompletionProof(metadata) : null;
     console.log(
@@ -852,6 +912,8 @@ async function handleRunStatus(parsed: ParsedArgs): Promise<number> {
         state,
         lastEvent: lastEvent ? serializeJournalEvent(lastEvent, runDir) : null,
         pendingByKind,
+        pendingEffectsSummary,
+        needsMoreIterations,
         metadata: formattedMetadata.jsonMetadata ?? null,
         completionProof,
       })
@@ -905,6 +967,53 @@ async function handleRunIterate(parsed: ParsedArgs): Promise<number> {
     return 0;
   } catch (error) {
     console.error(`[run:iterate] Error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+}
+
+async function handleRunExecuteTasks(parsed: ParsedArgs): Promise<number> {
+  if (!parsed.runDirArg) {
+    console.error(USAGE);
+    return 1;
+  }
+  const runDir = resolveRunDir(parsed.runsDir, parsed.runDirArg);
+  logVerbose("run:execute-tasks", parsed, {
+    runDir,
+    maxTasks: parsed.maxTasks,
+    kind: parsed.kindFilter,
+    timeout: parsed.timeout,
+    dryRun: parsed.dryRun,
+    json: parsed.json,
+    verbose: parsed.verbose,
+  });
+
+  try {
+    const result = await runExecuteTasks({
+      runDir,
+      maxTasks: parsed.maxTasks,
+      kind: parsed.kindFilter,
+      timeout: parsed.timeout,
+      verbose: parsed.verbose,
+      json: parsed.json,
+      dryRun: parsed.dryRun,
+    });
+
+    if (parsed.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      const taskSummary = result.tasks.length > 0
+        ? ` tasks=[${result.tasks.map((t) => `${t.effectId}:${t.status}`).join(",")}]`
+        : "";
+      console.log(
+        `[run:execute-tasks] action=${result.action} count=${result.count} reason=${result.reason}${taskSummary}`
+      );
+    }
+
+    return 0;
+  } catch (error) {
+    console.error(
+      `[run:execute-tasks] Error: ${error instanceof Error ? error.message : String(error)}`
+    );
     return 1;
   }
 }
@@ -1693,6 +1802,7 @@ const VALID_COMMANDS = [
   "run:events",
   "run:rebuild-state",
   "run:repair-journal",
+  "run:execute-tasks",
   "task:post",
   "task:list",
   "task:show",
@@ -1702,6 +1812,9 @@ const VALID_COMMANDS = [
   "session:state",
   "session:update",
   "session:check-iteration",
+  "session:last-message",
+  "session:iteration-message",
+  "hook:log",
   "skill:discover",
   "skill:fetch-remote",
   "health",
@@ -1825,6 +1938,9 @@ export function createBabysitterCli() {
         if (parsed.command === "run:iterate") {
           return await handleRunIterate(parsed);
         }
+        if (parsed.command === "run:execute-tasks") {
+          return await handleRunExecuteTasks(parsed);
+        }
         if (parsed.command === "run:events") {
           return await handleRunEvents(parsed);
         }
@@ -1891,6 +2007,34 @@ export function createBabysitterCli() {
             json: parsed.json,
           });
         }
+        if (parsed.command === "session:last-message") {
+          if (!parsed.transcriptPath) {
+            console.error("--transcript-path is required for session:last-message");
+            console.error(USAGE);
+            return 1;
+          }
+          return handleSessionLastMessage({
+            transcriptPath: parsed.transcriptPath,
+            json: parsed.json,
+          });
+        }
+        if (parsed.command === "session:iteration-message") {
+          return await handleSessionIterationMessage({
+            iteration: parsed.iteration,
+            runId: parsed.runIdOverride,
+            runsDir: parsed.runsDir,
+            pluginRoot: parsed.pluginRoot,
+            json: parsed.json,
+          });
+        }
+        // Hook commands
+        if (parsed.command === "hook:log") {
+          return await handleHookLog({
+            hookType: parsed.hookType ?? "",
+            logFile: parsed.logFile ?? "",
+            json: parsed.json,
+          });
+        }
         // Skill commands
         if (parsed.command === "skill:discover") {
           return await handleSkillDiscover({
@@ -1899,6 +2043,8 @@ export function createBabysitterCli() {
             cacheTtl: parsed.cacheTtl,
             runsDir: parsed.runsDir,
             json: parsed.json,
+            includeRemote: parsed.includeRemote,
+            summaryOnly: parsed.summaryOnly,
           });
         }
         if (parsed.command === "skill:fetch-remote") {

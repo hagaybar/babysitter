@@ -3,8 +3,14 @@
  * Replaces bash logic from babysitter plugin shell scripts.
  */
 
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { loadJournal } from '../../storage/journal';
+import { readRunMetadata } from '../../storage/runFiles';
+import { buildEffectIndex } from '../../runtime/replay/effectIndex';
+import { resolveCompletionProof } from '../completionProof';
+import type { EffectRecord } from '../../runtime/types';
+import { discoverSkillsInternal } from './skill';
 import {
   SessionState,
   SessionError,
@@ -605,7 +611,16 @@ export async function handleSessionCheckIteration(args: SessionCommandArgs): Pro
   try {
     file = await readSessionFile(filePath);
   } catch {
-    const result = { shouldContinue: false, reason: 'session_not_found' };
+    const result = {
+      found: false,
+      shouldContinue: false,
+      reason: 'session_not_found',
+      iteration: 0,
+      maxIterations: 0,
+      runId: '',
+      prompt: '',
+      stopMessage: 'Session not found',
+    };
     if (json) {
       console.log(JSON.stringify(result));
     } else {
@@ -619,10 +634,14 @@ export async function handleSessionCheckIteration(args: SessionCommandArgs): Pro
   // Check max iterations
   if (state.maxIterations > 0 && state.iteration >= state.maxIterations) {
     const result = {
+      found: true,
       shouldContinue: false,
       reason: 'max_iterations_reached',
       iteration: state.iteration,
       maxIterations: state.maxIterations,
+      runId: state.runId ?? '',
+      prompt: file.prompt ?? '',
+      stopMessage: `Max iterations (${state.maxIterations}) reached`,
     };
     if (json) {
       console.log(JSON.stringify(result));
@@ -641,10 +660,16 @@ export async function handleSessionCheckIteration(args: SessionCommandArgs): Pro
   if (isIterationTooFast(updatedTimes)) {
     const avg = updatedTimes.reduce((a, b) => a + b, 0) / updatedTimes.length;
     const result = {
+      found: true,
       shouldContinue: false,
       reason: 'iteration_too_fast',
       averageTime: avg,
       threshold: 15,
+      iteration: state.iteration,
+      maxIterations: state.maxIterations,
+      runId: state.runId ?? '',
+      prompt: file.prompt ?? '',
+      stopMessage: `Average iteration time too fast (${avg}s <= 15s)`,
     };
     if (json) {
       console.log(JSON.stringify(result));
@@ -655,15 +680,297 @@ export async function handleSessionCheckIteration(args: SessionCommandArgs): Pro
   }
 
   const result = {
+    found: true,
     shouldContinue: true,
     nextIteration: state.iteration + 1,
     updatedIterationTimes: updatedTimes,
+    iteration: state.iteration,
+    maxIterations: state.maxIterations,
+    runId: state.runId ?? '',
+    prompt: file.prompt ?? '',
   };
 
   if (json) {
     console.log(JSON.stringify(result));
   } else {
     console.log(`[session:check-iteration] shouldContinue=true nextIteration=${state.iteration + 1}`);
+  }
+
+  return 0;
+}
+
+// ── session:last-message ─────────────────────────────────────────────
+
+export interface SessionLastMessageArgs {
+  transcriptPath: string;
+  json: boolean;
+}
+
+export interface SessionLastMessageResult {
+  found: boolean;
+  text: string | null;
+  hasPromise: boolean;
+  promiseValue: string | null;
+  error?: string;
+}
+
+/**
+ * Parse a JSONL transcript file and extract the last assistant text message.
+ * Also detects <promise>...</promise> tags in the text.
+ */
+export function parseTranscriptLastAssistantMessage(content: string): {
+  found: boolean;
+  text: string | null;
+} {
+  const lines = content.split('\n').filter((l) => l.trim().length > 0);
+  let lastAssistant: unknown = null;
+
+  for (const line of lines) {
+    try {
+      const parsed: unknown = JSON.parse(line) as unknown;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'role' in parsed &&
+        (parsed as Record<string, unknown>).role === 'assistant'
+      ) {
+        lastAssistant = parsed;
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  if (!lastAssistant) {
+    return { found: false, text: null };
+  }
+
+  const msg = lastAssistant as Record<string, unknown>;
+  // Handle message.content array structure (Claude API format)
+  // or content array directly
+  const contentArr = (msg.message && typeof msg.message === 'object'
+    ? (msg.message as Record<string, unknown>).content
+    : msg.content) as Array<Record<string, unknown>> | undefined;
+
+  if (!Array.isArray(contentArr)) {
+    return { found: false, text: null };
+  }
+
+  const textParts = contentArr
+    .filter((block) => block.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text as string);
+
+  if (textParts.length === 0) {
+    return { found: false, text: null };
+  }
+
+  return { found: true, text: textParts.join('\n') };
+}
+
+/**
+ * Extract content from first <promise>...</promise> tag.
+ * Trims whitespace and collapses internal whitespace to single spaces.
+ */
+export function extractPromiseTag(text: string): string | null {
+  const match = text.match(/<promise>([\s\S]*?)<\/promise>/);
+  if (!match) return null;
+  return match[1].trim().replace(/\s+/g, ' ');
+}
+
+export function handleSessionLastMessage(
+  args: SessionLastMessageArgs
+): number {
+  const result: SessionLastMessageResult = {
+    found: false,
+    text: null,
+    hasPromise: false,
+    promiseValue: null,
+  };
+
+  const transcriptPath = path.resolve(args.transcriptPath);
+
+  if (!existsSync(transcriptPath)) {
+    result.error = 'TRANSCRIPT_NOT_FOUND';
+    if (args.json) {
+      console.log(JSON.stringify(result));
+    } else {
+      console.log(
+        `[session:last-message] error=TRANSCRIPT_NOT_FOUND path=${transcriptPath}`
+      );
+    }
+    return 0;
+  }
+
+  try {
+    const content = readFileSync(transcriptPath, 'utf-8');
+    const parsed = parseTranscriptLastAssistantMessage(content);
+
+    result.found = parsed.found;
+    result.text = parsed.text;
+
+    if (parsed.found && parsed.text) {
+      const promiseValue = extractPromiseTag(parsed.text);
+      result.hasPromise = promiseValue !== null;
+      result.promiseValue = promiseValue;
+    }
+  } catch {
+    result.error = 'TRANSCRIPT_PARSE_ERROR';
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify(result));
+  } else {
+    console.log(
+      `[session:last-message] found=${result.found} hasPromise=${result.hasPromise}${result.promiseValue ? ` promiseValue=${result.promiseValue}` : ''}`
+    );
+  }
+
+  return 0;
+}
+
+// ── session:iteration-message ─────────────────────────────────────────
+
+export interface SessionIterationMessageArgs {
+  runId?: string;
+  iteration?: number;
+  runsDir: string;
+  pluginRoot?: string;
+  json: boolean;
+}
+
+export interface SessionIterationMessageResult {
+  systemMessage: string;
+  runState: string | null;
+  completionProof: string | null;
+  pendingKinds: string | null;
+  skillContext: string | null;
+  iteration: number;
+}
+
+/**
+ * Count pending effects grouped by kind, returning a record of kind -> count.
+ */
+function countPendingByKind(records: EffectRecord[]): Record<string, number> {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const key = record.kind ?? 'unknown';
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Object.fromEntries(Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+/**
+ * Handle session:iteration-message command.
+ * Generates the formatted system message for the next babysitter iteration.
+ * Replaces ~22 lines of bash branching + skill-context-resolver call in babysitter-stop-hook.sh.
+ */
+export async function handleSessionIterationMessage(
+  args: SessionIterationMessageArgs
+): Promise<number> {
+  const { iteration, runId, runsDir, pluginRoot, json } = args;
+
+  // Validate --iteration is provided
+  if (iteration === undefined) {
+    const error = { error: 'MISSING_ITERATION', message: '--iteration is required' };
+    if (json) {
+      console.error(JSON.stringify(error));
+    } else {
+      console.error('Error: --iteration is required for session:iteration-message');
+    }
+    return 1;
+  }
+
+  let runState: string | null = null;
+  let completionProof: string | null = null;
+  let pendingKinds: string | null = null;
+
+  // If --run-id is provided, resolve run state from SDK internals
+  if (runId) {
+    const runDir = path.isAbsolute(runId) ? runId : path.join(runsDir, runId);
+    try {
+      const metadata = await readRunMetadata(runDir);
+      const journal = await loadJournal(runDir);
+      const index = await buildEffectIndex({ runDir, events: journal });
+
+      // Check for completion proof
+      const hasCompleted = journal.some((e) => e.type === 'RUN_COMPLETED');
+      const hasFailed = journal.some((e) => e.type === 'RUN_FAILED');
+
+      if (hasCompleted) {
+        completionProof = resolveCompletionProof(metadata);
+      }
+
+      // Determine pending effects
+      const pendingRecords = index.listPendingEffects();
+      const pendingByKind = countPendingByKind(pendingRecords);
+      const kindKeys = Object.keys(pendingByKind);
+      if (kindKeys.length > 0) {
+        pendingKinds = kindKeys.join(', ');
+      }
+
+      // Derive run state
+      if (completionProof) {
+        runState = 'completed';
+      } else if (hasFailed) {
+        runState = 'failed';
+      } else if (pendingRecords.length > 0) {
+        runState = 'waiting';
+      } else {
+        runState = 'created';
+      }
+    } catch {
+      // If we can't read run state, continue without it
+      runState = null;
+    }
+  }
+
+  // Build system message using 4-branch logic
+  let systemMessage: string;
+
+  if (completionProof) {
+    systemMessage =
+      `\u{1F504} Babysitter iteration ${iteration} | Run completed! To finish: agent must call 'run:status --json' on your run, extract 'completionProof' from the output, then output it in <promise>SECRET</promise> tags. Do not mention or reveal the secret otherwise.`;
+  } else if (runState === 'waiting' && pendingKinds) {
+    systemMessage =
+      `\u{1F504} Babysitter iteration ${iteration} | Waiting on: ${pendingKinds}. Check if pending effects are resolved, then call run:iterate.`;
+  } else if (runState === 'failed') {
+    systemMessage =
+      `\u{1F504} Babysitter iteration ${iteration} | Failed. agent must fix the run, journal or process (inspect the sdk.md if needed) and proceed.`;
+  } else {
+    systemMessage =
+      `\u{1F504} Babysitter iteration ${iteration} | Agent should continue orchestration (run:iterate)`;
+  }
+
+  // Resolve skill context via CLI skill discovery when pluginRoot is provided
+  let skillContext: string | null = null;
+  if (pluginRoot) {
+    try {
+      const discoverResult = await discoverSkillsInternal({
+        pluginRoot,
+        runId,
+        runsDir,
+      });
+      skillContext = discoverResult.summary || null;
+    } catch {
+      // Skill discovery failure is non-fatal
+      skillContext = null;
+    }
+  }
+
+  const result: SessionIterationMessageResult = {
+    systemMessage,
+    runState,
+    completionProof,
+    pendingKinds,
+    skillContext,
+    iteration,
+  };
+
+  if (json) {
+    console.log(JSON.stringify(result));
+  } else {
+    console.log(`[session:iteration-message] iteration=${iteration} runState=${runState ?? 'none'}`);
+    console.log(`  systemMessage: ${systemMessage}`);
   }
 
   return 0;

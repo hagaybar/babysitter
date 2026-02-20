@@ -340,6 +340,57 @@ describe("run lifecycle inspection commands", () => {
       expect(line).toContain("pending[total]=0");
     });
 
+    it("includes pendingEffectsSummary with zero totals and needsMoreIterations=false for a fresh run", async () => {
+      const runDir = await createRunSkeleton("run-fresh-summary");
+
+      const exitCode = await cli.run(["run:status", runDir, "--json"]);
+
+      expect(exitCode).toBe(0);
+      const payload = readLastJson(logSpy);
+      expect(payload.state).toBe("created");
+      expect(payload.pendingEffectsSummary).toEqual({
+        totalPending: 0,
+        countsByKind: {},
+        autoRunnableCount: 0,
+      });
+      expect(payload.needsMoreIterations).toBe(false);
+    });
+
+    it("includes pendingEffectsSummary with autoRunnableCount > 0 and needsMoreIterations=true when node effects are pending", async () => {
+      const runDir = await createRunWithPendingEffects();
+
+      const exitCode = await cli.run(["run:status", runDir, "--json"]);
+
+      expect(exitCode).toBe(0);
+      const payload = readLastJson(logSpy);
+      expect(payload.state).toBe("waiting");
+      expect(payload.pendingEffectsSummary.totalPending).toBe(2);
+      expect(payload.pendingEffectsSummary.countsByKind).toEqual({ breakpoint: 1, node: 1 });
+      expect(payload.pendingEffectsSummary.autoRunnableCount).toBe(1);
+      expect(payload.needsMoreIterations).toBe(true);
+    });
+
+    it("reports needsMoreIterations=false for a completed run", async () => {
+      const runId = "run-completed-iterations";
+      const runDir = await createRunSkeleton(runId);
+      await appendRequestedEffect(runDir, "ef-node-done", "node", "build");
+      await appendResolvedEffect(runDir, "ef-node-done");
+      await appendEvent({
+        runDir,
+        eventType: "RUN_COMPLETED",
+        event: { outputRef: "state/output.json" },
+      });
+
+      const exitCode = await cli.run(["run:status", runDir, "--json"]);
+
+      expect(exitCode).toBe(0);
+      const payload = readLastJson(logSpy);
+      expect(payload.state).toBe("completed");
+      expect(payload.pendingEffectsSummary.totalPending).toBe(0);
+      expect(payload.pendingEffectsSummary.autoRunnableCount).toBe(0);
+      expect(payload.needsMoreIterations).toBe(false);
+    });
+
     it("honors terminal RUN_* events even if pending work remains", async () => {
       const runDir = await createRunWithHistory();
 

@@ -126,8 +126,8 @@ RESUME_RESULT=$($CLI session:resume \
   --json 2>&1) || {
   # Parse error from JSON output if possible
   if echo "$RESUME_RESULT" | grep -q '"error"'; then
-    ERROR_CODE=$(echo "$RESUME_RESULT" | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')
-    ERROR_MSG=$(echo "$RESUME_RESULT" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
+    ERROR_CODE=$(echo "$RESUME_RESULT" | jq -r '.error // empty')
+    ERROR_MSG=$(echo "$RESUME_RESULT" | jq -r '.message // empty')
 
     if [[ "$ERROR_CODE" == "RUN_NOT_FOUND" ]]; then
       echo "❌ Error: Run not found: $RUN_ID" >&2
@@ -154,9 +154,9 @@ RESUME_RESULT=$($CLI session:resume \
 }
 
 # Extract values from JSON output
-STATE_FILE=$(echo "$RESUME_RESULT" | sed -n 's/.*"stateFile":"\([^"]*\)".*/\1/p')
-STATE=$(echo "$RESUME_RESULT" | sed -n 's/.*"runState":"\([^"]*\)".*/\1/p')
-PROCESS_ID=$(echo "$RESUME_RESULT" | sed -n 's/.*"processId":"\([^"]*\)".*/\1/p')
+STATE_FILE=$(echo "$RESUME_RESULT" | jq -r '.stateFile // empty')
+STATE=$(echo "$RESUME_RESULT" | jq -r '.runState // empty')
+PROCESS_ID=$(echo "$RESUME_RESULT" | jq -r '.processId // empty')
 
 BABYSITTER_STATE_FILE="${STATE_FILE:-$STATE_DIR/${CLAUDE_SESSION_ID}.md}"
 STATE="${STATE:-unknown}"

@@ -84,7 +84,7 @@ ASSOC_RESULT=$($CLI session:associate \
   --json 2>&1) || {
   # Parse error from JSON output if possible
   if echo "$ASSOC_RESULT" | grep -q '"error"'; then
-    ERROR_MSG=$(echo "$ASSOC_RESULT" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
+    ERROR_MSG=$(echo "$ASSOC_RESULT" | jq -r '.message // empty')
     echo "❌ Error: ${ERROR_MSG:-Association failed}" >&2
     # Check for specific error types
     if echo "$ASSOC_RESULT" | grep -q "SESSION_NOT_FOUND"; then
