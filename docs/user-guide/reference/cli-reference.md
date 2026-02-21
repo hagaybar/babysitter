@@ -164,13 +164,15 @@ babysitter run:create \
   --entry .a5c/processes/tdd/main.js#tddProcess \
   --inputs ./inputs.json \
   --run-id "run-$(date -u +%Y%m%d-%H%M%S)-auth-feature" \
+  --prompt "Implement auth feature with TDD" \
   --json
 
 # With request description
 babysitter run:create \
   --process-id dev/api \
   --entry ./process.js#apiProcess \
-  --request "Build REST API with authentication"
+  --request "Build REST API with authentication" \
+  --prompt "Build REST API with authentication"
 ```
 
 ---
@@ -714,6 +716,7 @@ RESULT=$($CLI run:create \
   --process-id "$PROCESS_ID" \
   --entry "$ENTRY" \
   --inputs inputs.json \
+  --prompt "Build feature with TDD" \
   --json)
 
 RUN_ID=$(echo "$RESULT" | jq -r '.runId')
@@ -800,7 +803,7 @@ done
 
 ```bash
 # Create
-babysitter run:create --process-id <id> --entry <path>#<export> --json
+babysitter run:create --process-id <id> --entry <path>#<export> [--prompt <text>] --json
 
 # Status
 babysitter run:status <runId> --json

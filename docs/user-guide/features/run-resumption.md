@@ -72,7 +72,8 @@ One team member starts work during the day, another continues overnight.
 babysitter run:create \
   --process-id feature/auth \
   --entry ./code/main.js#process \
-  --inputs ./inputs.json
+  --inputs ./inputs.json \
+  --prompt "Implement auth feature for the platform"
 
 # Developer B (evening): Continues the run
 claude "/babysitter:call resume --run-id feature-auth-20260125"
