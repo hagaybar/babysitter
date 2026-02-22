@@ -70,6 +70,7 @@ for (const pluginManifest of pluginManifestData) {
   const currentPluginVersion = pluginManifest.data.version;
   const newPluginVersion = bumpVersion(currentPluginVersion, bumpTarget);
   pluginManifest.data.version = newPluginVersion;
+  pluginManifest.data.sdkVersion = newVersion;
   writeFileSync(pluginManifest.path, `${JSON.stringify(pluginManifest.data, null, 2)}\n`);
 }
 

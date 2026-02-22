@@ -11,15 +11,17 @@ Orchestrate `.a5c/runs/<runId>/` through iterative execution. Use the SDK CLI to
 ## Dependencies
 
 ### Babysitter SDK and CLI
-make sure you have the latest version of the cli:
+
+Read the SDK version from the plugin manifest to ensure version compatibility:
 
 ```bash
-npm i -g @a5c-ai/babysitter@latest @a5c-ai/babysitter-sdk@latest
+SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${CLAUDE_PLUGIN_ROOT}/plugin.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}")
+npm i -g @a5c-ai/babysitter@$SDK_VERSION @a5c-ai/babysitter-sdk@$SDK_VERSION
 ```
 
 then use the CLI alias: CLI="babysitter"
 
-**Alternatively, use the CLI alias:** `CLI="npx -y @a5c-ai/babysitter-sdk@latest"`
+**Alternatively, use the CLI alias:** `CLI="npx -y @a5c-ai/babysitter-sdk@$SDK_VERSION"`
 
 ### jq
 
