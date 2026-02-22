@@ -195,6 +195,7 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
   }
 
   log.setContext("session", sessionId);
+  log.info(`Session ID: ${sessionId}`);
 
   // 2. Resolve pluginRoot and stateDir
   const pluginRoot =
@@ -204,6 +205,7 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
     (pluginRoot ? path.join(pluginRoot, "skills", "babysit", "state") : "");
 
   if (!stateDir) {
+    log.warn("Cannot determine state directory — allowing exit");
     if (verbose) {
       process.stderr.write(
         "[hook:run stop] Cannot determine state directory\n",
@@ -217,11 +219,13 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
 
   // 3. Check iteration (replaces session:check-iteration CLI call)
   const filePath = getSessionFilePath(stateDir, sessionId);
+  log.info(`Checking session at: ${filePath}`);
 
   let sessionFile;
   try {
     if (!(await sessionFileExists(filePath))) {
       // No active loop
+      log.info("No active loop found — allowing exit");
       if (verbose) {
         process.stderr.write(
           `[hook:run stop] No active loop found for session ${sessionId}\n`,
@@ -233,6 +237,7 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
     sessionFile = await readSessionFile(filePath);
   } catch {
     // Cannot read session — allow exit
+    log.warn("Session file read error — allowing exit");
     process.stdout.write('{"decision":"allow"}\n');
     return 0;
   }
