@@ -47,9 +47,9 @@ The babysitter workflow has 4 steps:
 Interview the user for the intent, requirements, goal, scope, etc.
 using AskUserQuestion tool (before setting the in-session loop).
 
-A multi-step phase to understand the intent and perspective to approach the process building after researching the repo, short research online if needed, short research in the target repo, additional instructions, intent and library (processes, specializations, skills, subagents, methodologies, references, etc.) / guide for methodology building. (clarifications regarding the intent, requirements, goal, scope, etc.) - the library is at [skill-root]/process/specializations/**/**/** and [skill-root]/process/methodologies/
+A multi-step phase to understand the intent and perspective to approach the process building after researching the repo, short research online if needed, short research in the target repo, additional instructions, intent and library (processes, specializations, skills, subagents, methodologies, references, etc.) / guide for methodology building. (clarifications regarding the intent, requirements, goal, scope, etc.) - the library is at [skill-root]/process/specializations/**/**/** and [skill-root]/process/methodologies/ and under [skill-root]/process/contrib/[contributer-username]/]
 
-The first step should be the look at the state of the repo, then find the most relevant processes, specializations, skills, subagents, methodologies, references, etc. to use as a reference.
+The first step should be the look at the state of the repo, then find the most relevant processes, specializations, skills, subagents, methodologies, references, etc. to use as a reference. use the babysitter cli discover command to find the relevant processes, skills, subagents, etc at various stages.
 
 Then this phase can have: research online, research the repo, user questions, and other steps one after the other until the intent, requirements, goal, scope, etc. are clear and the user is satisfied with the understanding. after each step, decide the type of next step to take. do not plan more than 1 step ahead in this phase. and the same step type can be used more than once in this phase.
 
@@ -84,7 +84,9 @@ This single command creates the run AND binds the session (initializing the stop
 **For resuming existing runs:**
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/babysit/scripts/setup-babysitter-run-resume.sh" --claude-session-id "${CLAUDE_SESSION_ID}" --run-id RUN_ID"
+$CLI session:resume --session-id "${CLAUDE_SESSION_ID}" \
+  --state-dir "${CLAUDE_PLUGIN_ROOT}/skills/babysit/state" \
+  --run-id <runId> --runs-dir .a5c/runs --json
 ```
 
 ### 3. Run Iteration
