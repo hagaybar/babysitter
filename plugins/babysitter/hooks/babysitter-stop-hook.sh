@@ -29,9 +29,9 @@ fi
 
 # Run the CLI, capturing stdout; redirect stderr to log if available
 if [ -n "$LOG_DIR" ]; then
-  RESULT=$(babysitter hook:run --hook-type stop --plugin-root "$PLUGIN_ROOT" --json < "$INPUT_FILE" 2>"$LOG_DIR/babysitter-stop-hook-stderr.log")
+  RESULT=$(babysitter hook:run --hook-type stop --harness claude-code --plugin-root "$PLUGIN_ROOT" --json < "$INPUT_FILE" 2>"$LOG_DIR/babysitter-stop-hook-stderr.log")
 else
-  RESULT=$(babysitter hook:run --hook-type stop --plugin-root "$PLUGIN_ROOT" --json < "$INPUT_FILE" 2>/dev/null)
+  RESULT=$(babysitter hook:run --hook-type stop --harness claude-code --plugin-root "$PLUGIN_ROOT" --json < "$INPUT_FILE" 2>/dev/null)
 fi
 EXIT_CODE=$?
 

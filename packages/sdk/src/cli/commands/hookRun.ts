@@ -86,6 +86,8 @@ function createHookLogger(hookName: string): HookLogger {
 
 export interface HookRunCommandArgs {
   hookType: string;
+  /** Which host tool is invoking the hook. Defaults to "claude-code". */
+  harness: string;
   pluginRoot?: string;
   stateDir?: string;
   runsDir?: string;
@@ -113,12 +115,13 @@ async function readStdin(): Promise<string> {
 // Hook input parsing
 // ---------------------------------------------------------------------------
 
-interface StopHookInput {
+// Claude Code hook input shapes (harness: "claude-code")
+interface ClaudeCodeStopHookInput {
   session_id?: string;
   transcript_path?: string;
 }
 
-interface SessionStartHookInput {
+interface ClaudeCodeSessionStartHookInput {
   session_id?: string;
 }
 
@@ -157,7 +160,10 @@ function countPendingByKind(records: EffectRecord[]): Record<string, number> {
 }
 
 // ---------------------------------------------------------------------------
-// handleHookRunStop — replaces babysitter-stop-hook.sh (249 lines)
+// handleHookRunStop — Claude Code "SessionEnd" hook handler
+//
+// Claude Code-specific: reads {session_id, transcript_path} from stdin,
+// outputs {decision: "approve"|"block", reason?, systemMessage?, instructions?}
 // ---------------------------------------------------------------------------
 
 async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
@@ -180,7 +186,7 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
     return 0;
   }
 
-  const hookInput = parseHookInput(rawInput) as StopHookInput;
+  const hookInput = parseHookInput(rawInput) as ClaudeCodeStopHookInput;
   log.info("Hook input received");
 
   const sessionId = safeStr(hookInput as Record<string, unknown>, "session_id");
@@ -505,7 +511,10 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
-// handleHookRunSessionStart — replaces babysitter-session-start-hook.sh
+// handleHookRunSessionStart — Claude Code "SessionStart" hook handler
+//
+// Claude Code-specific: reads {session_id} from stdin,
+// writes session ID to CLAUDE_ENV_FILE if set, outputs {}
 // ---------------------------------------------------------------------------
 
 async function handleHookRunSessionStart(
@@ -522,7 +531,7 @@ async function handleHookRunSessionStart(
     return 0;
   }
 
-  const hookInput = parseHookInput(rawInput) as SessionStartHookInput;
+  const hookInput = parseHookInput(rawInput) as ClaudeCodeSessionStartHookInput;
   const sessionId = safeStr(
     hookInput as Record<string, unknown>,
     "session_id",
@@ -575,8 +584,10 @@ async function cleanupSession(filePath: string): Promise<void> {
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
+const SUPPORTED_HARNESSES = ["claude-code"] as const;
+
 export async function handleHookRun(args: HookRunCommandArgs): Promise<number> {
-  const { hookType, json } = args;
+  const { hookType, harness, json } = args;
 
   if (!hookType) {
     const error = {
@@ -587,6 +598,19 @@ export async function handleHookRun(args: HookRunCommandArgs): Promise<number> {
       process.stderr.write(JSON.stringify(error) + "\n");
     } else {
       process.stderr.write("Error: --hook-type is required for hook:run\n");
+    }
+    return 1;
+  }
+
+  if (!SUPPORTED_HARNESSES.includes(harness as typeof SUPPORTED_HARNESSES[number])) {
+    const error = {
+      error: "UNSUPPORTED_HARNESS",
+      message: `Unsupported harness: "${harness}". Supported: ${SUPPORTED_HARNESSES.join(", ")}`,
+    };
+    if (json) {
+      process.stderr.write(JSON.stringify(error) + "\n");
+    } else {
+      process.stderr.write(`Error: ${error.message}\n`);
     }
     return 1;
   }

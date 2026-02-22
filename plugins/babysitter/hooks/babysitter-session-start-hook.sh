@@ -20,4 +20,4 @@ if ! command -v babysitter &>/dev/null; then
   fi
 fi
 
-exec babysitter hook:run --hook-type session-start --json < /dev/stdin
+exec babysitter hook:run --hook-type session-start --harness claude-code --json < /dev/stdin

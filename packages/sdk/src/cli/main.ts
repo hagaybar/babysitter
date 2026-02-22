@@ -64,7 +64,7 @@ const USAGE = `Usage:
   babysitter session:iteration-message --iteration <n> [--run-id <id>] [--runs-dir <dir>] [--plugin-root <dir>] [--json]
   babysitter skill:discover --plugin-root <dir> [--run-id <id>] [--cache-ttl <seconds>] [--runs-dir <dir>] [--include-remote] [--summary-only] [--json]
   babysitter hook:log --hook-type <type> --log-file <path> [--json]
-  babysitter hook:run --hook-type <stop|session-start> [--plugin-root <dir>] [--state-dir <dir>] [--runs-dir <dir>] [--json] [--verbose]
+  babysitter hook:run --hook-type <stop|session-start> [--harness <claude-code>] [--plugin-root <dir>] [--state-dir <dir>] [--runs-dir <dir>] [--json] [--verbose]
   babysitter skill:fetch-remote --source-type <github|well-known> --url <url> [--json]
   babysitter health [--json] [--verbose]
   babysitter configure [show|validate|paths] [--json] [--defaults-only]
@@ -127,8 +127,9 @@ interface ParsedArgs {
   timeout?: number;
   // session:last-message args
   transcriptPath?: string;
-  // Hook log command args
+  // Hook command args
   hookType?: string;
+  harness?: string;
   logFile?: string;
   // Skill command args
   pluginRoot?: string;
@@ -367,9 +368,13 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.transcriptPath = expectFlagValue(rest, ++i, "--transcript-path");
       continue;
     }
-    // Hook log command flags
+    // Hook command flags
     if (arg === "--hook-type") {
       parsed.hookType = expectFlagValue(rest, ++i, "--hook-type");
+      continue;
+    }
+    if (arg === "--harness") {
+      parsed.harness = expectFlagValue(rest, ++i, "--harness");
       continue;
     }
     if (arg === "--log-file") {
@@ -2043,6 +2048,7 @@ export function createBabysitterCli() {
         if (parsed.command === "hook:run") {
           return await handleHookRun({
             hookType: parsed.hookType ?? "",
+            harness: parsed.harness ?? "claude-code",
             pluginRoot: parsed.pluginRoot,
             stateDir: parsed.stateDir,
             runsDir: parsed.runsDir,
