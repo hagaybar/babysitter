@@ -42,42 +42,44 @@ The babysitter workflow has 4 steps:
 
 #### Interview phase
 
-interview the user for the intent, requirements, goal, scope, etc.
-using AskUserQuestion tool (or breakpoint if running in non-interactive mode) -  (before setting the in-session loop).
+##### Interactive mode (default)
 
-a multi-step phase to understand the intent and perspecitve to approach the process building after researching the repo, short research online if needed, short research in the target repo, additional instructions, intent and library (processes, specializations, skills, subagents, methodologies, references, etc.) / guide for methodology building. (clarifications regarding the intent, requirements, goal, scope, etc.) - the library is at [skill-root]/process/specializations/**/**/** and [skill-root]/process/methodologies/ 
+Interview the user for the intent, requirements, goal, scope, etc.
+using AskUserQuestion tool (before setting the in-session loop).
 
-the first step should be the look at the state of the repo, then find the most relevant processes, specializations, skills, subagents, methodologies, references, etc. to use as a reference.
+A multi-step phase to understand the intent and perspective to approach the process building after researching the repo, short research online if needed, short research in the target repo, additional instructions, intent and library (processes, specializations, skills, subagents, methodologies, references, etc.) / guide for methodology building. (clarifications regarding the intent, requirements, goal, scope, etc.) - the library is at [skill-root]/process/specializations/**/**/** and [skill-root]/process/methodologies/
 
-then this phase can have: research online, research the repo, user questions, and other steps one after the other until the intent, requirements, goal, scope, etc. are clear and the user is satisfied with the understanding. after each step, decide the type of next step to take. do not plan more than 1 step ahead in this phase. and the same step type can be used more than once in this phase.
+The first step should be the look at the state of the repo, then find the most relevant processes, specializations, skills, subagents, methodologies, references, etc. to use as a reference.
+
+Then this phase can have: research online, research the repo, user questions, and other steps one after the other until the intent, requirements, goal, scope, etc. are clear and the user is satisfied with the understanding. after each step, decide the type of next step to take. do not plan more than 1 step ahead in this phase. and the same step type can be used more than once in this phase.
+
+##### Non-interactive mode (running with -p flag or no AskUserQuestion tool)
+
+When running non-interactively, skip the interview phase entirely. Instead:
+1. Parse the initial prompt to extract intent, scope, and requirements.
+2. Research the repo structure to understand the codebase.
+3. Search the process library for the most relevant specialization/methodology.
+4. Proceed directly to the process creation phase using the extracted requirements.
 
 #### Process creation phase
 
 after the interview phase, create the complete custom process files (js and jsons) for the run according to the Process Creation Guidelines and methodologies section. also install the babysitter-sdk inside .a5c if it is not already installed. (install it in .a5c/package.json if it is not already installed, make sure to use the latest version)
 you must abide the syntax and structure of the process files from the process library.
 
-After the process is created and before setting up the session, describe the process in high level (not the code or implementation details) to the user and ask for confirmation to use it, also generate it as a [process-name].diagram.md and [process-name].process.md file. if the user is not satisfied with the process, go back to the process creation phase and modify the process according to the feedback of the user until the user is satisfied with the process.
+After the process is created and before creating the run:
+- **Interactive mode**: describe the process at high level (not the code or implementation details) to the user and ask for confirmation to use it, also generate it as a [process-name].diagram.md and [process-name].process.md file. If the user is not satisfied with the process, go back to the process creation phase and modify the process according to the feedback of the user until the user is satisfied with the process.
+- **Non-interactive mode**: proceed directly to creating the run without user confirmation.
 
-### 2. Setup session:
+### 2. Create run and bind session (single command):
 
 **For new runs:**
 
-1. Setup in-session loop:
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/babysit/scripts/setup-babysitter-run.sh" --claude-session-id "${CLAUDE_SESSION_ID}" $PROMPT
+$CLI run:create --process-id <id> --entry <path> --inputs <file> --prompt "$PROMPT" \
+  --harness claude-code --session-id "${CLAUDE_SESSION_ID}" --plugin-root "${CLAUDE_PLUGIN_ROOT}" --json
 ```
 
-2. Create the run:
-```bash
-$CLI run:create --process-id <id> --entry <path> --inputs <file> --prompt "$PROMPT" --json
-```
-
-3. Associate session with run:
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/babysit/scripts/associate-session-with-run.sh" \
-  --run-id <runId-from-step-2> \
-  --claude-session-id "${CLAUDE_SESSION_ID}"
-```
+This single command creates the run AND binds the session (initializing the stop-hook loop). The JSON output includes `runId`, `runDir`, and `session` binding status.
 
 **For resuming existing runs:**
 
@@ -299,9 +301,10 @@ export const skillTask = defineTask('analyzer-skill', (args, taskCtx) => ({
 
 ## Quick Commands Reference
 
-**Create run:**
+**Create run (with session binding):**
 ```bash
-$CLI run:create --process-id <id> --entry <path>#<export> --inputs <path> --run-id <id> --prompt "<initial prompt>"
+$CLI run:create --process-id <id> --entry <path>#<export> --inputs <path> --run-id <id> --prompt "<initial prompt>" \
+  --harness claude-code --session-id "${CLAUDE_SESSION_ID}" --plugin-root "${CLAUDE_PLUGIN_ROOT}" --json
 ```
 
 **Check status:**
@@ -390,7 +393,7 @@ CRITICAL RULE: do not use the babysit skill inside the delegated tasks. if you a
 
 CRITICAL RULE: Never build a wrapper, python or helper scripts to orchestrate the runs. Use the CLI to drive the orchestration loop and never loop programmatically.
 
-CRITICAL RULE: Never fallback to simpler execution if the user activated this skill. persist in executing the orchestration itself rather than simplifying the execution by bypassing the process above - you must create a valid process js file, create a run and associate it with the session, then iterate the run until it is completed.
+CRITICAL RULE: Never fallback to simpler execution if the user activated this skill. persist in executing the orchestration itself rather than simplifying the execution by bypassing the process above - you must create a valid process js file, create a run (with --harness claude-code --session-id to bind the session), then iterate the run until it is completed.
 
 ## See Also
 - `process/tdd-quality-convergence.js` - TDD quality convergence example - read and look for relevant processes and methodolies before creating the code process for a new run (create the run using the CLI, then use these process as a reference)

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { exec, IMAGE } from "./helpers";
+import { exec, IMAGE, PLUGIN_DIR } from "./helpers";
 import path from "path";
 import fs from "fs";
 
@@ -10,9 +10,6 @@ const WORKSPACE_HOST = path.resolve(ARTIFACTS_DIR, "workspace");
 
 const HAS_API_KEY =
   !!process.env.ANTHROPIC_API_KEY || !!process.env.ANTHROPIC_FOUNDRY_API_KEY;
-
-const PLUGIN_DIR =
-  "/home/claude/.claude/plugins/cache/a5c-ai/babysitter/4.0.128";
 
 beforeAll(() => {
   fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
@@ -624,17 +621,7 @@ describe.skipIf(!HAS_API_KEY)("Session transcript verification", () => {
     );
   });
 
-  test("transcript contains setup-babysitter-run bash command", () => {
-    const files = findTranscriptFiles();
-    if (files.length === 0) return;
-
-    const allTranscript = files.flatMap((f) => readTranscript(f));
-    const bashCmds = extractBashCommands(allTranscript);
-    const setupCmd = bashCmds.find((c) => c.command.includes("setup-babysitter-run"));
-    expect(setupCmd).toBeDefined();
-  });
-
-  test("transcript contains run:create bash command", () => {
+  test("transcript contains run:create bash command (with --harness for unified session binding)", () => {
     const files = findTranscriptFiles();
     if (files.length === 0) return;
 
@@ -642,16 +629,16 @@ describe.skipIf(!HAS_API_KEY)("Session transcript verification", () => {
     const bashCmds = extractBashCommands(allTranscript);
     const createCmd = bashCmds.find((c) => c.command.includes("run:create"));
     expect(createCmd).toBeDefined();
-  });
 
-  test("transcript contains associate-session-with-run bash command", () => {
-    const files = findTranscriptFiles();
-    if (files.length === 0) return;
-
-    const allTranscript = files.flatMap((f) => readTranscript(f));
-    const bashCmds = extractBashCommands(allTranscript);
-    const assocCmd = bashCmds.find((c) => c.command.includes("associate-session-with-run"));
-    expect(assocCmd).toBeDefined();
+    // The unified workflow uses --harness to bind the session in the same command
+    // Accept both old (setup script + associate script) and new (--harness flag) workflows
+    const usesUnifiedHarness = bashCmds.some((c) =>
+      c.command.includes("run:create") && c.command.includes("--harness"),
+    );
+    const usesLegacySetup = bashCmds.some((c) =>
+      c.command.includes("setup-babysitter-run"),
+    );
+    expect(usesUnifiedHarness || usesLegacySetup).toBe(true);
   });
 
   test("transcript contains run:iterate bash commands (at least 2 for build + verify)", () => {
@@ -684,24 +671,25 @@ describe.skipIf(!HAS_API_KEY)("Session transcript verification", () => {
     const allTranscript = files.flatMap((f) => readTranscript(f));
     const bashCmds = extractBashCommands(allTranscript);
 
-    // Find the first occurrence of each key command
-    const setupIdx = bashCmds.findIndex((c) => c.command.includes("setup-babysitter-run"));
+    // Core commands that must exist in both old and new workflows
     const createIdx = bashCmds.findIndex((c) => c.command.includes("run:create"));
-    const assocIdx = bashCmds.findIndex((c) => c.command.includes("associate-session-with-run"));
     const firstIterateIdx = bashCmds.findIndex((c) => c.command.includes("run:iterate"));
     const firstPostIdx = bashCmds.findIndex((c) => c.command.includes("task:post"));
 
-    // All commands must exist
-    expect(setupIdx).toBeGreaterThanOrEqual(0);
+    // run:create, run:iterate, and task:post must exist
     expect(createIdx).toBeGreaterThanOrEqual(0);
-    expect(assocIdx).toBeGreaterThanOrEqual(0);
     expect(firstIterateIdx).toBeGreaterThanOrEqual(0);
     expect(firstPostIdx).toBeGreaterThanOrEqual(0);
 
-    // Order: setup → create → associate → iterate → post
-    expect(createIdx).toBeGreaterThan(setupIdx);
+    // Order: create → iterate → post
     expect(firstIterateIdx).toBeGreaterThan(createIdx);
     expect(firstPostIdx).toBeGreaterThan(firstIterateIdx);
+
+    // Legacy workflow may also have setup-babysitter-run before create
+    const setupIdx = bashCmds.findIndex((c) => c.command.includes("setup-babysitter-run"));
+    if (setupIdx >= 0) {
+      expect(createIdx).toBeGreaterThan(setupIdx);
+    }
   });
 
   test("assistant output contains <promise> tag with valid completion proof", () => {
