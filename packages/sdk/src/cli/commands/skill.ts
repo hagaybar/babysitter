@@ -1,5 +1,5 @@
 /**
- * Skill discovery CLI commands.
+ * Skill, agent, and process discovery CLI commands.
  * Replaces bash logic from skill-context-resolver.sh and skill-discovery.sh
  */
 
@@ -20,6 +20,7 @@ export interface SkillCommandArgs {
   runsDir?: string;
   includeRemote?: boolean;
   summaryOnly?: boolean;
+  processPath?: string;
 }
 
 /**
@@ -35,10 +36,33 @@ export interface SkillMetadata {
 }
 
 /**
- * Cache entry for skill discovery.
+ * Discovered agent metadata.
  */
-interface SkillCacheEntry {
+export interface AgentMetadata {
+  name: string;
+  description: string;
+  role?: string;
+  category: string;
+  source: 'local' | 'local-plugin' | 'remote';
+  file?: string;
+}
+
+/**
+ * Discovered process metadata.
+ */
+export interface ProcessMetadata {
+  name: string;
+  category: string;
+  source: 'library' | 'repo';
+  file: string;
+}
+
+/**
+ * Cache entry for discovery results.
+ */
+interface DiscoveryCacheEntry {
   skills: SkillMetadata[];
+  agents: AgentMetadata[];
   summary: string;
   timestamp: number;
 }
@@ -46,13 +70,18 @@ interface SkillCacheEntry {
 const DEFAULT_CACHE_TTL = 300; // 5 minutes
 const CACHE_DIR = path.join(os.tmpdir(), 'babysitter-skill-cache');
 
+// ---------------------------------------------------------------------------
+// Frontmatter parsing
+// ---------------------------------------------------------------------------
+
 /**
- * Parse YAML frontmatter from a SKILL.md file content.
+ * Parse scalar key:value pairs from YAML frontmatter.
+ * Ignores array items (lines starting with "- ").
  */
-function parseSkillFrontmatter(content: string): { name: string; description: string; category: string } | null {
+function parseFrontmatter(content: string): Record<string, string> {
   const lines = content.split('\n');
   let inFrontmatter = false;
-  const frontmatter: Record<string, string> = {};
+  const fields: Record<string, string> = {};
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -65,7 +94,7 @@ function parseSkillFrontmatter(content: string): { name: string; description: st
       }
     }
 
-    if (inFrontmatter && trimmed) {
+    if (inFrontmatter && trimmed && !trimmed.startsWith('- ')) {
       const colonIndex = trimmed.indexOf(':');
       if (colonIndex > 0) {
         const key = trimmed.slice(0, colonIndex).trim();
@@ -75,25 +104,55 @@ function parseSkillFrontmatter(content: string): { name: string; description: st
             (value.startsWith("'") && value.endsWith("'"))) {
           value = value.slice(1, -1);
         }
-        frontmatter[key] = value;
+        if (value) {
+          fields[key] = value;
+        }
       }
     }
   }
 
-  const name = frontmatter.name;
+  return fields;
+}
+
+/**
+ * Parse YAML frontmatter from a SKILL.md file content.
+ */
+function parseSkillFrontmatter(content: string): { name: string; description: string; category: string } | null {
+  const fields = parseFrontmatter(content);
+  const name = fields.name;
   if (!name) return null;
 
   return {
     name,
-    description: frontmatter.description || '',
-    category: frontmatter.category || frontmatter.domain || '',
+    description: fields.description || '',
+    category: fields.category || fields.domain || '',
   };
 }
 
 /**
- * Recursively find all SKILL.md files in a directory.
+ * Parse YAML frontmatter from an AGENT.md file content.
  */
-async function findSkillFiles(dir: string, maxDepth: number = 5): Promise<string[]> {
+function parseAgentFrontmatter(content: string): { name: string; description: string; role?: string; category: string } | null {
+  const fields = parseFrontmatter(content);
+  const name = fields.name;
+  if (!name) return null;
+
+  return {
+    name,
+    description: fields.description || '',
+    role: fields.role || undefined,
+    category: fields.category || fields.domain || '',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// File scanning
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursively find files matching a target name in a directory.
+ */
+async function findMarkdownFiles(dir: string, targetName: string, maxDepth: number = 5): Promise<string[]> {
   const results: string[] = [];
 
   async function scan(currentDir: string, depth: number): Promise<void> {
@@ -108,7 +167,7 @@ async function findSkillFiles(dir: string, maxDepth: number = 5): Promise<string
 
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
-      if (entry.isFile() && entry.name === 'SKILL.md') {
+      if (entry.isFile() && entry.name === targetName) {
         results.push(fullPath);
       } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
         await scan(fullPath, depth + 1);
@@ -119,6 +178,38 @@ async function findSkillFiles(dir: string, maxDepth: number = 5): Promise<string
   await scan(dir, 0);
   return results;
 }
+
+/**
+ * Recursively find all SKILL.md files in a directory.
+ */
+async function findSkillFiles(dir: string, maxDepth: number = 5): Promise<string[]> {
+  return findMarkdownFiles(dir, 'SKILL.md', maxDepth);
+}
+
+/**
+ * Recursively find all AGENT.md files in a directory.
+ */
+async function findAgentFiles(dir: string, maxDepth: number = 5): Promise<string[]> {
+  return findMarkdownFiles(dir, 'AGENT.md', maxDepth);
+}
+
+/**
+ * Find *.js process files in a directory (non-recursive, depth 1 only).
+ */
+async function findProcessFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    return entries
+      .filter(e => e.isFile() && e.name.endsWith('.js'))
+      .map(e => path.join(dir, e.name));
+  } catch {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Directory scanning
+// ---------------------------------------------------------------------------
 
 /**
  * Read and parse skills from a directory.
@@ -138,7 +229,7 @@ async function scanSkillsDirectory(
       if (parsed) {
         skills.push({
           ...parsed,
-          description: parsed.description.slice(0, 80), // Truncate for compactness
+          description: parsed.description.slice(0, 80),
           source,
           file,
         });
@@ -152,6 +243,72 @@ async function scanSkillsDirectory(
 }
 
 /**
+ * Read and parse agents from a directory.
+ */
+async function scanAgentsDirectory(
+  dir: string,
+  source: 'local' | 'local-plugin',
+  maxFiles: number = 50
+): Promise<AgentMetadata[]> {
+  const agents: AgentMetadata[] = [];
+  const agentFiles = await findAgentFiles(dir);
+
+  for (const file of agentFiles.slice(0, maxFiles)) {
+    try {
+      const content = await fs.readFile(file, 'utf8');
+      const parsed = parseAgentFrontmatter(content);
+      if (parsed) {
+        agents.push({
+          ...parsed,
+          description: parsed.description.slice(0, 80),
+          source,
+          file,
+        });
+      }
+    } catch {
+      // Skip files that can't be read
+    }
+  }
+
+  return agents;
+}
+
+/**
+ * Read process file names from a directory and return ProcessMetadata.
+ */
+async function scanProcessesDirectory(
+  dir: string,
+  category: string,
+  source: 'library' | 'repo',
+): Promise<ProcessMetadata[]> {
+  const jsFiles = await findProcessFiles(dir);
+  return jsFiles.map(file => ({
+    name: path.basename(file, '.js'),
+    category,
+    source,
+    file,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Specialization scoping
+// ---------------------------------------------------------------------------
+
+/**
+ * Given a process path like "specializations/web-development/api-integration-testing.js"
+ * or a full path containing "specializations/<name>/", extract the specialization name.
+ */
+function extractSpecializationFromProcessPath(processPath: string): string | null {
+  const normalized = processPath.replace(/\\/g, '/');
+  const match = normalized.match(/specializations\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
+// ---------------------------------------------------------------------------
+// Cache
+// ---------------------------------------------------------------------------
+
+/**
  * Get cache file path for a run ID.
  */
 function getCachePath(runId: string, suffix: 'json' | 'summary'): string {
@@ -160,13 +317,16 @@ function getCachePath(runId: string, suffix: 'json' | 'summary'): string {
 }
 
 /**
- * Read cached skills if valid.
+ * Read cached discovery results if valid.
+ * Returns null on cache miss or if the entry is missing the agents field (legacy format).
  */
-async function readCache(runId: string, ttl: number): Promise<SkillCacheEntry | null> {
+async function readCache(runId: string, ttl: number): Promise<DiscoveryCacheEntry | null> {
   const cachePath = getCachePath(runId, 'json');
   try {
     const content = await fs.readFile(cachePath, 'utf8');
-    const entry = JSON.parse(content) as SkillCacheEntry;
+    const entry = JSON.parse(content) as DiscoveryCacheEntry;
+    // Require agents field to be present (invalidates old skills-only cache)
+    if (!Array.isArray(entry.agents)) return null;
     const age = (Date.now() - entry.timestamp) / 1000;
     if (age < ttl) {
       return entry;
@@ -180,7 +340,7 @@ async function readCache(runId: string, ttl: number): Promise<SkillCacheEntry | 
 /**
  * Write cache entry.
  */
-async function writeCache(runId: string, entry: SkillCacheEntry): Promise<void> {
+async function writeCache(runId: string, entry: DiscoveryCacheEntry): Promise<void> {
   try {
     await fs.mkdir(CACHE_DIR, { recursive: true });
     const cachePath = getCachePath(runId, 'json');
@@ -191,6 +351,10 @@ async function writeCache(runId: string, entry: SkillCacheEntry): Promise<void> 
     // Cache write failure is non-fatal
   }
 }
+
+// ---------------------------------------------------------------------------
+// Domain detection and sorting
+// ---------------------------------------------------------------------------
 
 /**
  * Detect domain/category from run process definition.
@@ -204,7 +368,6 @@ async function detectRunDomain(runId: string, runsDir: string): Promise<string> 
     const jsFile = files.find(f => f.endsWith('.js'));
     if (jsFile) {
       const content = await fs.readFile(path.join(runDir, jsFile), 'utf8');
-      // Look for domain hints in comments or metadata
       const match = content.match(/(?:domain|category|specialization)[:\s]*["']?([a-z-]+)/i);
       if (match) {
         return match[1].toLowerCase();
@@ -217,12 +380,23 @@ async function detectRunDomain(runId: string, runsDir: string): Promise<string> 
 }
 
 /**
- * Generate compact summary string from skills.
+ * Generate compact summary string from skills and agents.
  */
-function generateSummary(skills: SkillMetadata[]): string {
-  return skills
-    .map(s => `${s.name} (${s.description.slice(0, 60) || 'no description'})`)
-    .join(', ');
+function generateSummary(skills: SkillMetadata[], agents: AgentMetadata[]): string {
+  const parts: string[] = [];
+  if (skills.length > 0) {
+    const skillPart = skills
+      .map(s => `${s.name} (${s.description.slice(0, 60) || 'no description'})`)
+      .join(', ');
+    parts.push(skillPart);
+  }
+  if (agents.length > 0) {
+    const agentPart = agents
+      .map(a => `${a.name} (${a.description.slice(0, 60) || 'no description'})`)
+      .join(', ');
+    parts.push(agentPart);
+  }
+  return parts.join(', ');
 }
 
 /**
@@ -233,6 +407,18 @@ function deduplicateSkills(skills: SkillMetadata[]): SkillMetadata[] {
   return skills.filter(s => {
     if (seen.has(s.name)) return false;
     seen.add(s.name);
+    return true;
+  });
+}
+
+/**
+ * Deduplicate agents by name, keeping first occurrence.
+ */
+function deduplicateAgents(agents: AgentMetadata[]): AgentMetadata[] {
+  const seen = new Set<string>();
+  return agents.filter(a => {
+    if (seen.has(a.name)) return false;
+    seen.add(a.name);
     return true;
   });
 }
@@ -252,17 +438,37 @@ function sortSkillsByDomain(skills: SkillMetadata[], domain: string): SkillMetad
 }
 
 /**
- * Result from internal skill discovery.
+ * Sort agents by domain relevance if domain is provided.
+ */
+function sortAgentsByDomain(agents: AgentMetadata[], domain: string): AgentMetadata[] {
+  if (!domain) return agents;
+
+  const lowerDomain = domain.toLowerCase();
+  return [...agents].sort((a, b) => {
+    const aMatch = a.category.toLowerCase().includes(lowerDomain) ? 0 : 1;
+    const bMatch = b.category.toLowerCase().includes(lowerDomain) ? 0 : 1;
+    return aMatch - bMatch;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Main discovery
+// ---------------------------------------------------------------------------
+
+/**
+ * Result from internal discovery.
  */
 export interface DiscoverSkillsResult {
   skills: SkillMetadata[];
+  agents: AgentMetadata[];
+  processes?: ProcessMetadata[];
   summary: string;
   cached: boolean;
 }
 
 /**
- * Internal skill discovery logic, extracted for reuse by other CLI commands
- * (e.g. session:iteration-message).
+ * Internal discovery logic, extracted for reuse by other CLI commands
+ * (e.g. session:iteration-message, hookRun stop handler).
  *
  * Returns a structured result instead of writing to stdout.
  */
@@ -272,6 +478,8 @@ export async function discoverSkillsInternal(options: {
   cacheTtl?: number;
   runsDir?: string;
   includeRemote?: boolean;
+  processPath?: string;
+  includeProcesses?: boolean;
 }): Promise<DiscoverSkillsResult> {
   const {
     pluginRoot,
@@ -279,29 +487,41 @@ export async function discoverSkillsInternal(options: {
     cacheTtl = DEFAULT_CACHE_TTL,
     runsDir = '.a5c/runs',
     includeRemote = false,
+    processPath,
+    includeProcesses = false,
   } = options;
 
-  // Check cache first
-  const cached = await readCache(runId, cacheTtl);
-  if (cached) {
-    return { skills: cached.skills, summary: cached.summary, cached: true };
+  // Bypass cache when processPath is set (specialization-scoped queries)
+  if (!processPath) {
+    const cached = await readCache(runId, cacheTtl);
+    if (cached) {
+      return { skills: cached.skills, agents: cached.agents, summary: cached.summary, cached: true };
+    }
   }
 
-  // Detect domain from run
-  const domain = await detectRunDomain(runId, runsDir);
+  // Determine domain for sorting — from processPath or run metadata
+  let domain = '';
+  if (processPath) {
+    domain = extractSpecializationFromProcessPath(processPath) ?? '';
+  }
+  if (!domain) {
+    domain = await detectRunDomain(runId, runsDir);
+  }
 
-  // Scan skill directories
+  const specializationsDir = path.join(pluginRoot, 'skills', 'babysit', 'process', 'specializations');
+
+  // ------------------------------------------------------------------
+  // Skills
+  // ------------------------------------------------------------------
   const allSkills: SkillMetadata[] = [];
 
   // 1. Scan specializations directory
-  const specializationsDir = path.join(pluginRoot, 'skills', 'babysit', 'process', 'specializations');
   const specializationSkills = await scanSkillsDirectory(specializationsDir, 'local');
   allSkills.push(...specializationSkills);
 
   // 2. Scan plugin-level skills
   const pluginSkillsDir = path.join(pluginRoot, 'skills');
   const pluginSkills = await scanSkillsDirectory(pluginSkillsDir, 'local-plugin');
-  // Filter out specializations (already scanned)
   const filteredPluginSkills = pluginSkills.filter(s => !s.file?.includes('/specializations/'));
   allSkills.push(...filteredPluginSkills);
 
@@ -321,26 +541,132 @@ export async function discoverSkillsInternal(options: {
     allSkills.push(...remoteSkills);
   }
 
-  // Deduplicate and sort
-  let skills = deduplicateSkills(allSkills);
-  skills = sortSkillsByDomain(skills, domain);
+  // ------------------------------------------------------------------
+  // Agents
+  // ------------------------------------------------------------------
+  const allAgents: AgentMetadata[] = [];
 
-  // Limit to 30 for context window efficiency
+  // 1. Scan specializations directory for agents
+  const specializationAgents = await scanAgentsDirectory(specializationsDir, 'local');
+  allAgents.push(...specializationAgents);
+
+  // 2. Scan repo-level agents (.a5c/agents)
+  const repoAgentsDir = '.a5c/agents';
+  try {
+    await fs.access(repoAgentsDir);
+    const repoAgents = await scanAgentsDirectory(repoAgentsDir, 'local');
+    allAgents.push(...repoAgents);
+  } catch {
+    // Repo agents dir doesn't exist, skip
+  }
+
+  // ------------------------------------------------------------------
+  // Processes (only when explicitly requested — not for hooks/session)
+  // ------------------------------------------------------------------
+  let processes: ProcessMetadata[] | undefined;
+  if (includeProcesses) {
+    const allProcesses: ProcessMetadata[] = [];
+
+    // 1. Specialization processes
+    try {
+      const specDirs = await fs.readdir(specializationsDir, { withFileTypes: true });
+      for (const entry of specDirs) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          const specDir = path.join(specializationsDir, entry.name);
+          const procs = await scanProcessesDirectory(specDir, entry.name, 'library');
+          allProcesses.push(...procs);
+        }
+      }
+    } catch {
+      // Specializations dir may not exist
+    }
+
+    // 2. Methodology processes
+    const methodologiesDir = path.join(pluginRoot, 'skills', 'babysit', 'process', 'methodologies');
+    try {
+      // Top-level methodology files
+      const topProcs = await scanProcessesDirectory(methodologiesDir, 'methodologies', 'library');
+      allProcesses.push(...topProcs);
+
+      // Methodology subdirectories
+      const methodDirs = await fs.readdir(methodologiesDir, { withFileTypes: true });
+      for (const entry of methodDirs) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          const methodDir = path.join(methodologiesDir, entry.name);
+          const procs = await scanProcessesDirectory(methodDir, entry.name, 'library');
+          allProcesses.push(...procs);
+        }
+      }
+    } catch {
+      // Methodologies dir may not exist
+    }
+
+    // 3. Repo-level processes (.a5c/processes)
+    const repoProcessesDir = '.a5c/processes';
+    try {
+      await fs.access(repoProcessesDir);
+      const repoProcs = await scanProcessesDirectory(repoProcessesDir, 'project', 'repo');
+      allProcesses.push(...repoProcs);
+    } catch {
+      // Repo processes dir doesn't exist
+    }
+
+    processes = allProcesses;
+  }
+
+  // ------------------------------------------------------------------
+  // Specialization scoping
+  // ------------------------------------------------------------------
+  let skills = deduplicateSkills(allSkills);
+  let agents = deduplicateAgents(allAgents);
+
+  if (processPath && domain) {
+    // Filter to matching specialization
+    const lowerDomain = domain.toLowerCase();
+    const matchesSpec = (filePath?: string) => {
+      if (!filePath) return false;
+      const normalized = filePath.replace(/\\/g, '/').toLowerCase();
+      return normalized.includes(`/specializations/${lowerDomain}/`);
+    };
+
+    skills = skills.filter(s => matchesSpec(s.file));
+    agents = agents.filter(a => matchesSpec(a.file));
+
+    if (processes) {
+      processes = processes.filter(p =>
+        p.category.toLowerCase() === lowerDomain
+      );
+    }
+  } else {
+    // Sort by domain relevance
+    skills = sortSkillsByDomain(skills, domain);
+    agents = sortAgentsByDomain(agents, domain);
+  }
+
+  // Limit for context window efficiency
   skills = skills.slice(0, 30);
+  agents = agents.slice(0, 30);
 
   // Generate summary
-  const summary = generateSummary(skills);
+  const summary = generateSummary(skills, agents);
 
-  // Cache results
-  const cacheEntry: SkillCacheEntry = {
-    skills,
-    summary,
-    timestamp: Date.now(),
-  };
-  await writeCache(runId, cacheEntry);
+  // Cache results (only for non-scoped queries)
+  if (!processPath) {
+    const cacheEntry: DiscoveryCacheEntry = {
+      skills,
+      agents,
+      summary,
+      timestamp: Date.now(),
+    };
+    await writeCache(runId, cacheEntry);
+  }
 
-  return { skills, summary, cached: false };
+  return { skills, agents, processes, summary, cached: false };
 }
+
+// ---------------------------------------------------------------------------
+// Remote sources
+// ---------------------------------------------------------------------------
 
 /**
  * Fetch skills from remote sources defined in .a5c/skill-sources.json
@@ -349,7 +675,6 @@ export async function discoverSkillsInternal(options: {
 async function fetchRemoteSkillSources(_pluginRoot: string): Promise<SkillMetadata[]> {
   const remoteSkills: SkillMetadata[] = [];
 
-  // Default external source
   interface SkillSource {
     type: 'github' | 'well-known';
     url: string;
@@ -390,9 +715,13 @@ async function fetchRemoteSkillSources(_pluginRoot: string): Promise<SkillMetada
   return remoteSkills;
 }
 
+// ---------------------------------------------------------------------------
+// CLI command handlers
+// ---------------------------------------------------------------------------
+
 /**
  * Handle skill:discover command.
- * Scans for available skills in plugin and repo directories.
+ * Scans for available skills, agents, and processes in plugin and repo directories.
  * Thin wrapper around discoverSkillsInternal that handles CLI I/O.
  */
 export async function handleSkillDiscover(args: SkillCommandArgs): Promise<number> {
@@ -404,6 +733,7 @@ export async function handleSkillDiscover(args: SkillCommandArgs): Promise<numbe
     json,
     includeRemote,
     summaryOnly,
+    processPath,
   } = args;
 
   if (!pluginRoot) {
@@ -411,7 +741,7 @@ export async function handleSkillDiscover(args: SkillCommandArgs): Promise<numbe
     if (json) {
       console.error(JSON.stringify(error));
     } else {
-      console.error('❌ Error: --plugin-root is required');
+      console.error('Error: --plugin-root is required');
     }
     return 1;
   }
@@ -422,22 +752,54 @@ export async function handleSkillDiscover(args: SkillCommandArgs): Promise<numbe
     cacheTtl,
     runsDir,
     includeRemote,
+    processPath,
+    includeProcesses: true,
   });
 
   if (summaryOnly) {
-    // Output just the summary string, no JSON wrapper
     console.log(result.summary || '');
     return 0;
   }
 
   if (json) {
-    console.log(JSON.stringify({ skills: result.skills, summary: result.summary, cached: result.cached }));
+    console.log(JSON.stringify({
+      skills: result.skills,
+      agents: result.agents,
+      processes: result.processes,
+      summary: result.summary,
+      cached: result.cached,
+    }));
   } else {
-    console.log(result.summary || '(no skills found)');
+    if (result.skills.length === 0 && result.agents.length === 0) {
+      console.log('(no skills or agents found)');
+    } else {
+      if (result.skills.length > 0) {
+        console.log(`Skills (${result.skills.length}):`);
+        for (const skill of result.skills) {
+          console.log(`  - ${skill.name}: ${skill.description || '(no description)'}${skill.file ? ` [${skill.file}]` : ''}`);
+        }
+      }
+      if (result.agents.length > 0) {
+        console.log(`Agents (${result.agents.length}):`);
+        for (const agent of result.agents) {
+          console.log(`  - ${agent.name}: ${agent.description || '(no description)'}${agent.file ? ` [${agent.file}]` : ''}`);
+        }
+      }
+      if (result.processes && result.processes.length > 0) {
+        console.log(`Processes (${result.processes.length}):`);
+        for (const proc of result.processes) {
+          console.log(`  - ${proc.name} [${proc.category}]: ${proc.file}`);
+        }
+      }
+    }
   }
 
   return 0;
 }
+
+// ---------------------------------------------------------------------------
+// Remote discovery helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Convert GitHub web URL to API URL.
@@ -446,10 +808,10 @@ function githubWebToApi(url: string): { apiUrl: string; rawBase: string } | null
   // https://github.com/OWNER/REPO/tree/BRANCH/PATH
   const treeMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)/);
   if (treeMatch) {
-    const [, owner, repo, branch, path] = treeMatch;
+    const [, owner, repo, branch, treePath] = treeMatch;
     return {
-      apiUrl: `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
-      rawBase: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`,
+      apiUrl: `https://api.github.com/repos/${owner}/${repo}/contents/${treePath}?ref=${branch}`,
+      rawBase: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${treePath}`,
     };
   }
 
@@ -499,7 +861,6 @@ async function discoverGitHub(url: string): Promise<SkillMetadata[]> {
   const { apiUrl, rawBase } = parsed;
   const skills: SkillMetadata[] = [];
 
-  // Fetch directory listing
   const listingText = await fetchWithTimeout(apiUrl);
   if (!listingText) return [];
 
@@ -510,10 +871,8 @@ async function discoverGitHub(url: string): Promise<SkillMetadata[]> {
     return [];
   }
 
-  // Find directories or SKILL.md files
   const dirs = listing.filter(e => e.type === 'dir').map(e => e.name);
 
-  // Check for flat SKILL.md
   const skillFile = listing.find(e => e.name === 'SKILL.md');
   if (skillFile?.download_url) {
     const content = await fetchWithTimeout(skillFile.download_url);
@@ -530,7 +889,6 @@ async function discoverGitHub(url: string): Promise<SkillMetadata[]> {
     return skills;
   }
 
-  // Fetch SKILL.md from each subdirectory (limit to 20)
   let count = 0;
   for (const dir of dirs) {
     if (count >= 20) break;
@@ -560,11 +918,9 @@ async function discoverWellKnown(url: string): Promise<SkillMetadata[]> {
   const baseUrl = url.replace(/\/$/, '');
   const skills: SkillMetadata[] = [];
 
-  // Try path-relative well-known
   let indexUrl = `${baseUrl}/.well-known/skills/index.json`;
   let content = await fetchWithTimeout(indexUrl);
 
-  // Try root well-known
   if (!content) {
     const hostMatch = baseUrl.match(/^https?:\/\/([^/]+)/);
     if (hostMatch) {
@@ -607,7 +963,7 @@ export async function handleSkillFetchRemote(args: SkillCommandArgs): Promise<nu
     if (json) {
       console.error(JSON.stringify(error));
     } else {
-      console.error('❌ Error: --source-type is required (github or well-known)');
+      console.error('Error: --source-type is required (github or well-known)');
     }
     return 1;
   }
@@ -617,7 +973,7 @@ export async function handleSkillFetchRemote(args: SkillCommandArgs): Promise<nu
     if (json) {
       console.error(JSON.stringify(error));
     } else {
-      console.error('❌ Error: --url is required');
+      console.error('Error: --url is required');
     }
     return 1;
   }
@@ -638,7 +994,7 @@ export async function handleSkillFetchRemote(args: SkillCommandArgs): Promise<nu
       if (json) {
         console.error(JSON.stringify(error));
       } else {
-        console.error(`❌ Error: Unknown source type: ${unknownType}`);
+        console.error(`Error: Unknown source type: ${unknownType}`);
       }
       return 1;
     }

@@ -181,12 +181,17 @@ describe("Stop hook core lifecycle", () => {
     }
   });
 
-  test("blocks exit when active session state exists", () => {
+  test("blocks exit when active session state exists with associated run", () => {
     const sid = "active-" + Date.now();
     const transcriptFile = "/tmp/hook-transcript-active.jsonl";
 
+    // Create a mock run so the session has an associated run
+    const runDir = createMockRun("active-run", [
+      { type: "RUN_CREATED", data: { runId: "active-run", processId: "test" } },
+    ]);
+
     dockerExec(
-      `babysitter session:init --session-id ${sid} --state-dir ${STATE_DIR} --prompt "test orchestration" --json`,
+      `babysitter session:init --session-id ${sid} --state-dir ${STATE_DIR} --prompt "test orchestration" --run-id ${runDir} --json`,
     );
     createTranscript(transcriptFile, "some assistant output here");
 
@@ -200,12 +205,33 @@ describe("Stop hook core lifecycle", () => {
     expect(output!.systemMessage).toContain("iteration");
   });
 
+  test("allows exit when session has no associated run", () => {
+    const sid = "norun-" + Date.now();
+    const transcriptFile = "/tmp/hook-transcript-norun.jsonl";
+
+    // Init session WITHOUT --run-id
+    dockerExec(
+      `babysitter session:init --session-id ${sid} --state-dir ${STATE_DIR} --prompt "no run test" --json`,
+    );
+    createTranscript(transcriptFile, "some assistant output here");
+
+    const result = runHook(sid, transcriptFile);
+
+    assertAllowsExit(result);
+    assertSessionDeleted(sid);
+  });
+
   test("increments iteration counter on each invocation", () => {
     const sid = "iter-" + Date.now();
     const transcriptFile = "/tmp/hook-transcript-iter.jsonl";
 
+    // Create a mock run so the session has an associated run
+    const runDir = createMockRun("iter-run", [
+      { type: "RUN_CREATED", data: { runId: "iter-run", processId: "test" } },
+    ]);
+
     dockerExec(
-      `babysitter session:init --session-id ${sid} --state-dir ${STATE_DIR} --prompt "counting test" --json`,
+      `babysitter session:init --session-id ${sid} --state-dir ${STATE_DIR} --prompt "counting test" --run-id ${runDir} --json`,
     );
     createTranscript(transcriptFile, "iteration output");
 

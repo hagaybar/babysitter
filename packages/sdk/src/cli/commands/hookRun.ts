@@ -346,6 +346,19 @@ async function handleHookRunStop(args: HookRunCommandArgs): Promise<number> {
     return 0;
   }
 
+  // 4b. If no run is associated, there's nothing to iterate on — allow exit
+  if (!runId) {
+    log.info("No run associated with session — allowing exit");
+    if (verbose) {
+      process.stderr.write(
+        `[hook:run stop] No run associated with session ${sessionId} — allowing exit\n`,
+      );
+    }
+    await cleanupSession(filePath);
+    process.stdout.write('{"decision":"approve"}\n');
+    return 0;
+  }
+
   // 5. If runId is present, get run status
   let runState = "";
   let completionProof = "";

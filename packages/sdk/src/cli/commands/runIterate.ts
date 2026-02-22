@@ -19,12 +19,14 @@ import { orchestrateIteration } from "../../runtime/orchestrateIteration";
 import type { EffectAction } from "../../runtime/types";
 import type { JsonRecord } from "../../storage/types";
 import { resolveCompletionProof } from "../completionProof";
+import { discoverSkillsInternal } from "./skill";
 
 export interface RunIterateOptions {
   runDir: string;
   iteration?: number;
   verbose?: boolean;
   json?: boolean;
+  pluginRoot?: string;
 }
 
 export interface RunIterateResult {
@@ -41,6 +43,8 @@ export interface RunIterateResult {
     runId: string;
     processId: string;
     hookStatus?: string;
+    discoveredSkills?: string[];
+    discoveredAgents?: string[];
   };
 }
 
@@ -189,6 +193,18 @@ export async function runIterate(options: RunIterateOptions): Promise<RunIterate
       hookStatus: hookResult.executedHooks?.length > 0 ? "executed" : "none",
     },
   };
+
+  // Discover available skills and agents
+  const pluginRoot = options.pluginRoot;
+  if (pluginRoot && result.metadata) {
+    try {
+      const discoverResult = await discoverSkillsInternal({ pluginRoot, runId });
+      result.metadata.discoveredSkills = discoverResult.skills.map(s => s.name);
+      result.metadata.discoveredAgents = discoverResult.agents.map(a => a.name);
+    } catch {
+      // Non-fatal
+    }
+  }
 
   return result;
 }

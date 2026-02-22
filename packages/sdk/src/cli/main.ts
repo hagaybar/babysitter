@@ -29,7 +29,7 @@ import {
   handleSessionLastMessage,
   handleSessionIterationMessage,
 } from "./commands/session";
-import { handleSkillDiscover, handleSkillFetchRemote } from "./commands/skill";
+import { handleSkillDiscover, handleSkillFetchRemote, discoverSkillsInternal } from "./commands/skill";
 import { handleHookLog } from "./commands/hookLog";
 import { handleHookRun } from "./commands/hookRun";
 import { resolveCompletionProof } from "./completionProof";
@@ -62,7 +62,7 @@ const USAGE = `Usage:
   babysitter session:check-iteration --session-id <id> --state-dir <dir> [--json]
   babysitter session:last-message --transcript-path <file> [--json]
   babysitter session:iteration-message --iteration <n> [--run-id <id>] [--runs-dir <dir>] [--plugin-root <dir>] [--json]
-  babysitter skill:discover --plugin-root <dir> [--run-id <id>] [--cache-ttl <seconds>] [--runs-dir <dir>] [--include-remote] [--summary-only] [--json]
+  babysitter skill:discover --plugin-root <dir> [--run-id <id>] [--cache-ttl <seconds>] [--runs-dir <dir>] [--include-remote] [--summary-only] [--process-path <path>] [--json]
   babysitter hook:log --hook-type <type> --log-file <path> [--json]
   babysitter hook:run --hook-type <stop|session-start> [--harness <claude-code>] [--plugin-root <dir>] [--state-dir <dir>] [--runs-dir <dir>] [--json] [--verbose]
   babysitter skill:fetch-remote --source-type <github|well-known> --url <url> [--json]
@@ -138,6 +138,7 @@ interface ParsedArgs {
   url?: string;
   includeRemote?: boolean;
   summaryOnly?: boolean;
+  processPath?: string;
 }
 
 interface ActionSummary {
@@ -409,6 +410,10 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--summary-only") {
       parsed.summaryOnly = true;
+      continue;
+    }
+    if (arg === "--process-path") {
+      parsed.processPath = expectFlagValue(rest, ++i, "--process-path");
       continue;
     }
     positionals.push(arg);
@@ -863,8 +868,33 @@ async function handleRunCreate(parsed: ParsedArgs): Promise<number> {
     inputs,
   });
   const entrySpec = formatEntrypointSpecifier(result.metadata.entrypoint);
+
+  // Discover available skills and agents for the new run
+  let discoveredSkills: string[] | undefined;
+  let discoveredAgents: string[] | undefined;
+  const discoverPluginRoot = parsed.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT;
+  if (discoverPluginRoot) {
+    try {
+      const discoverResult = await discoverSkillsInternal({
+        pluginRoot: discoverPluginRoot,
+        runId: result.runId,
+        runsDir: parsed.runsDir,
+      });
+      discoveredSkills = discoverResult.skills.map(s => s.name);
+      discoveredAgents = discoverResult.agents.map(a => a.name);
+    } catch {
+      // Non-fatal
+    }
+  }
+
   if (parsed.json) {
-    console.log(JSON.stringify({ runId: result.runId, runDir: result.runDir, entry: entrySpec }));
+    console.log(JSON.stringify({
+      runId: result.runId,
+      runDir: result.runDir,
+      entry: entrySpec,
+      discoveredSkills,
+      discoveredAgents,
+    }));
   } else {
     console.log(`[run:create] runId=${result.runId} runDir=${result.runDir} entry=${entrySpec}`);
   }
@@ -955,6 +985,7 @@ async function handleRunIterate(parsed: ParsedArgs): Promise<number> {
       iteration: parsed.iteration,
       verbose: parsed.verbose,
       json: parsed.json,
+      pluginRoot: parsed.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT,
     });
 
     if (parsed.json) {
@@ -2066,6 +2097,7 @@ export function createBabysitterCli() {
             json: parsed.json,
             includeRemote: parsed.includeRemote,
             summaryOnly: parsed.summaryOnly,
+            processPath: parsed.processPath,
           });
         }
         if (parsed.command === "skill:fetch-remote") {
