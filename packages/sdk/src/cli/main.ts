@@ -33,7 +33,7 @@ import { handleSkillDiscover, handleSkillFetchRemote, discoverSkillsInternal, di
 import { handleHookLog } from "./commands/hookLog";
 import { handleHookRun } from "./commands/hookRun";
 import { resolveCompletionProof } from "./completionProof";
-import { getAdapter } from "../harness";
+import { getAdapter, getAdapterByName } from "../harness";
 import type { SessionBindResult } from "../harness";
 import {
   BabysitterRuntimeError,
@@ -873,31 +873,51 @@ async function handleRunCreate(parsed: ParsedArgs): Promise<number> {
   const entrySpec = formatEntrypointSpecifier(result.metadata.entrypoint);
 
   // --- Harness-specific session binding ---
-  // The adapter auto-detects the active harness and resolves session IDs
-  // from CLI flags, env vars (CLAUDE_SESSION_ID), or env files (CLAUDE_ENV_FILE).
-  const adapter = getAdapter();
-  let sessionBound: SessionBindResult | undefined;
-  const sessionId = adapter.resolveSessionId(parsed);
+  // When --harness is explicitly specified, use that adapter directly.
+  // Otherwise auto-detect from env vars (CLAUDE_SESSION_ID, CLAUDE_ENV_FILE).
+  const adapter = parsed.harness
+    ? getAdapterByName(parsed.harness)
+    : getAdapter();
 
-  if (sessionId) {
-    sessionBound = await adapter.bindSession({
-      sessionId,
-      runId: result.runId,
-      runDir: result.runDir,
-      pluginRoot: adapter.resolvePluginRoot(parsed),
-      stateDir: parsed.stateDir,
-      maxIterations: parsed.maxIterations,
-      prompt: parsed.prompt ?? "",
-      verbose: parsed.verbose,
-      json: parsed.json,
-    });
+  let sessionBound: SessionBindResult | undefined;
+
+  if (adapter) {
+    const sessionId = adapter.resolveSessionId(parsed);
+
+    if (sessionId) {
+      sessionBound = await adapter.bindSession({
+        sessionId,
+        runId: result.runId,
+        runDir: result.runDir,
+        pluginRoot: adapter.resolvePluginRoot(parsed),
+        stateDir: parsed.stateDir,
+        maxIterations: parsed.maxIterations,
+        prompt: parsed.prompt ?? "",
+        verbose: parsed.verbose,
+        json: parsed.json,
+      });
+    } else if (parsed.harness) {
+      // --harness was specified but no session ID could be resolved
+      sessionBound = {
+        harness: parsed.harness,
+        sessionId: "",
+        error: "No session ID provided. Use --session-id or set CLAUDE_SESSION_ID.",
+      };
+    }
+  } else if (parsed.harness) {
+    // --harness was specified but the adapter name is unknown
+    sessionBound = {
+      harness: parsed.harness,
+      sessionId: "",
+      error: `Unsupported harness: ${parsed.harness}`,
+    };
   }
 
   // Discover available skills and agents for the new run
   // Try process-driven discovery first (reads @skill/@agent markers from process file)
   let discoveredSkills: Array<{ name: string; file?: string }> | undefined;
   let discoveredAgents: Array<{ name: string; file?: string }> | undefined;
-  const discoverPluginRoot = adapter.resolvePluginRoot(parsed);
+  const discoverPluginRoot = adapter?.resolvePluginRoot(parsed) ?? getAdapter().resolvePluginRoot(parsed);
   if (discoverPluginRoot) {
     try {
       const processDiscovery = discoverFromProcessFile({
