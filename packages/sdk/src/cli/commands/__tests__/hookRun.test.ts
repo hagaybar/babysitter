@@ -298,6 +298,7 @@ describe("handleHookRun session-start", () => {
         {
           hookType: "session-start",
           harness: "claude-code",
+          stateDir,
           json: true,
         },
       );
@@ -311,6 +312,63 @@ describe("handleHookRun session-start", () => {
         delete process.env.CLAUDE_ENV_FILE;
       }
     }
+  });
+
+  it("creates baseline session state file when stateDir is provided", async () => {
+    const sessionId = "init-state-session";
+    const code = await callWithStdin(
+      JSON.stringify({ session_id: sessionId }),
+      {
+        hookType: "session-start",
+        harness: "claude-code",
+        stateDir,
+        json: true,
+      },
+    );
+    expect(code).toBe(0);
+
+    // Verify state file was created
+    const filePath = getSessionFilePath(stateDir, sessionId);
+    const exists = await fs.access(filePath).then(() => true, () => false);
+    expect(exists).toBe(true);
+
+    // Verify it has the expected baseline content (no run association)
+    const content = await fs.readFile(filePath, "utf8");
+    expect(content).toContain("active: true");
+    expect(content).toContain("iteration: 1");
+    expect(content).toContain('run_id: ""');
+  });
+
+  it("does not overwrite existing session state file", async () => {
+    const sessionId = "existing-state-session";
+    const filePath = getSessionFilePath(stateDir, sessionId);
+    const now = getCurrentTimestamp();
+    const existingState: SessionState = {
+      active: true,
+      iteration: 5,
+      maxIterations: 100,
+      runId: "existing-run",
+      startedAt: now,
+      lastIterationAt: now,
+      iterationTimes: [],
+    };
+    await writeSessionFile(filePath, existingState, "Existing prompt");
+
+    const code = await callWithStdin(
+      JSON.stringify({ session_id: sessionId }),
+      {
+        hookType: "session-start",
+        harness: "claude-code",
+        stateDir,
+        json: true,
+      },
+    );
+    expect(code).toBe(0);
+
+    // Verify existing state was preserved (not overwritten)
+    const content = await fs.readFile(filePath, "utf8");
+    expect(content).toContain("iteration: 5");
+    expect(content).toContain('run_id: "existing-run"');
   });
 
   it("outputs empty object when no session ID", async () => {

@@ -576,13 +576,54 @@ async function handleHookRunSessionStart(
     }
   }
 
+  // 3. Create baseline session state file so the stop hook can find it later.
+  //    run:create --harness will update this file with the run association.
+  //    Without this, the stop hook has no state file to check if run:create
+  //    session binding is skipped or fails.
+  const pluginRoot =
+    args.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || "";
+  const stateDir =
+    args.stateDir ||
+    (pluginRoot ? path.join(pluginRoot, "skills", "babysit", "state") : "");
+
+  if (stateDir) {
+    const filePath = getSessionFilePath(stateDir, sessionId);
+    try {
+      if (!(await sessionFileExists(filePath))) {
+        const now = getCurrentTimestamp();
+        const state: SessionState = {
+          active: true,
+          iteration: 1,
+          maxIterations: 256,
+          runId: "",
+          startedAt: now,
+          lastIterationAt: now,
+          iterationTimes: [],
+        };
+        await writeSessionFile(filePath, state, "");
+        if (verbose) {
+          process.stderr.write(
+            `[hook:run session-start] Created session state: ${filePath}\n`,
+          );
+        }
+      }
+    } catch {
+      // Non-fatal — state file creation failure
+      if (verbose) {
+        process.stderr.write(
+          `[hook:run session-start] Failed to create session state in ${stateDir}\n`,
+        );
+      }
+    }
+  }
+
   if (verbose) {
     process.stderr.write(
       `Babysitter session started: ${sessionId}\n`,
     );
   }
 
-  // 3. Output empty object
+  // 4. Output empty object
   process.stdout.write("{}\n");
   return 0;
 }
