@@ -393,4 +393,4 @@ OVERALL HEALTH: <HEALTHY | WARNING | CRITICAL>
 - **WARNING**: At least one check is WARN but none are FAIL.
 - **CRITICAL**: At least one check is FAIL.
 
-Present the full detailed findings for each check BEFORE the summary table, so the user can see the evidence. End with the summary table and recommendations.
+Present the full detailed findings for each check BEFORE the summary table, so the user can see the evidence. End with the summary table and recommendations. Also, create a single HTML report file with all the findings that uses the arwes UI framework and open it for the user in the browser.
