@@ -135,6 +135,12 @@ $CLI run:iterate .a5c/runs/<runId> --json --iteration <n> --plugin-root "${CLAUD
 - `"failed"` - Run failed with error
 - `"none"` - No pending effects
 
+  **Common mistake to avoid:**
+  ❌ WRONG: Calling run:iterate, performing the effect, posting the result,
+     then calling run:iterate again in the same session
+  ✅ CORRECT: Calling run:iterate, performing the effect, posting the result,
+     then STOPPING the session so the hook triggers the next iteration
+
 ### 4. Get Effects
 
 ```bash
@@ -233,10 +239,9 @@ $CLI task:post <runId> <effectId> --status ok
 echo '{"score": 85}' > tasks/<effectId>/output.json
 $CLI task:post <runId> <effectId> --status ok --value tasks/<effectId>/output.json
 ```
-
 ---
 
-### 7. Repeat the orchestration loop ONLY when asked by the stop hook
+### 7. STOP after every phase — the hook drives the loop, not you.
 
 you will be called by the stop-hook and you will be asked to repeat the orchestration loop or exit the loop by posting the completion proof. Repeat orchestration loop by calling run:iterate or doing the next right thing.
 
@@ -442,6 +447,8 @@ CRITICAL RULE: do not use the babysit skill inside the delegated tasks. if you a
 CRITICAL RULE: Never build a wrapper, python or helper scripts to orchestrate the runs. Use the CLI to drive the orchestration loop and never loop programmatically.
 
 CRITICAL RULE: Never fallback to simpler execution if the user activated this skill. persist in executing the orchestration itself rather than simplifying the execution by bypassing the process above - you must create a valid process js file, create a run (with --harness claude-code --session-id to bind the session), then iterate the run until it is completed.
+
+CRITICAL RULE: After run:create and after each effect is posted, you MUST stop the session and return control. Do NOT proceed to the next run:iterate in the same session turn. The stop-hook will call you back to continue. Running multiple iterations in a single session turn bypasses the hook loop and breaks the orchestration model. non-interactive mode only skips AskUserQuestion — it does not skip the stop-hook loop.
 
 ## See Also
 - `process/tdd-quality-convergence.js` - TDD quality convergence example - read and look for relevant processes and methodolies before creating the code process for a new run (create the run using the CLI, then use these process as a reference)
