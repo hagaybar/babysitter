@@ -211,7 +211,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
     if (verbose) {
       process.stderr.write(`[hook:run stop] stdin read error: ${msg}\n`);
     }
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -224,7 +224,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
     if (verbose) {
       process.stderr.write("[hook:run stop] No session ID in hook input\n");
     }
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -247,7 +247,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
         "[hook:run stop] Cannot determine state directory\n",
       );
     }
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -277,14 +277,14 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
             `[hook:run stop] No active loop found for session ${sessionId}\n`,
           );
         }
-        process.stdout.write('{"decision":"approve"}\n');
+        process.stdout.write("{}\n");
         return 0;
       }
     }
     sessionFile = await readSessionFile(filePath);
   } catch {
     log.warn(`Session file read error at ${filePath} — allowing exit`);
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -310,7 +310,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
       });
     }
     await cleanupSession(filePath);
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -341,7 +341,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
       });
     }
     await cleanupSession(filePath);
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -380,7 +380,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
           );
         }
         await cleanupSession(filePath);
-        process.stdout.write('{"decision":"approve"}\n');
+        process.stdout.write("{}\n");
         return 0;
       }
     } else {
@@ -390,7 +390,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
         );
       }
       await cleanupSession(filePath);
-      process.stdout.write('{"decision":"approve"}\n');
+      process.stdout.write("{}\n");
       return 0;
     }
   }
@@ -402,7 +402,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
       );
     }
     await cleanupSession(filePath);
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -415,7 +415,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
       );
     }
     await cleanupSession(filePath);
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
@@ -423,6 +423,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
   let runState = "";
   let completionProof = "";
   let pendingKinds = "";
+  let entrypointImportPath: string | undefined;
 
   if (runId) {
     try {
@@ -430,6 +431,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
         ? runId
         : path.join(runsDir, runId);
       const metadata = await readRunMetadata(runDir);
+      entrypointImportPath = metadata?.entrypoint?.importPath;
       const journal = await loadJournal(runDir);
       const index = await buildEffectIndex({ runDir, events: journal });
 
@@ -480,7 +482,7 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
         });
       }
       await cleanupSession(filePath);
-      process.stdout.write('{"decision":"approve"}\n');
+      process.stdout.write("{}\n");
       return 0;
     }
   }
@@ -508,33 +510,14 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
       });
     }
     await cleanupSession(filePath);
-    process.stdout.write('{"decision":"approve"}\n');
+    process.stdout.write("{}\n");
     return 0;
   }
 
   // 7. Not complete → continue loop
-  if (!prompt) {
-    if (verbose) {
-      process.stderr.write(
-        `[hook:run stop] State file corrupted - no prompt text\n`,
-      );
-    }
-    if (runId) {
-      await appendStopHookEvent(path.join(runsDir, runId), {
-        sessionId,
-        iteration: state.iteration,
-        decision: "approve",
-        reason: "no_prompt_text",
-        runState,
-        pendingKinds,
-        hasPromise,
-      });
-    }
-    await cleanupSession(filePath);
-    process.stdout.write('{"decision":"approve"}\n');
-    return 0;
-  }
-
+  // Note: prompt may be empty if session:init ran before run:create populated it.
+  // This is legitimate — the session is active with a bound run, so we continue
+  // the loop regardless of whether the prompt text is populated.
   const nextIteration = iteration + 1;
   const currentTime = getCurrentTimestamp();
 
@@ -556,17 +539,17 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
     }
   }
 
-  // 8. Build system message
-  let systemMessage: string;
+  // 8. Build reason (shown to Claude) and systemMessage (shown to user)
+  let iterationContext: string;
 
   if (completionProof) {
-    systemMessage = `\u{1F504} Babysitter iteration ${nextIteration} | Run completed! To finish: agent must call 'run:status --json' on your run, extract 'completionProof' from the output, then output it in <promise>SECRET</promise> tags. Do not mention or reveal the secret otherwise.`;
+    iterationContext = `Babysitter iteration ${nextIteration} | Run completed! To finish: call 'run:status --json' on your run, extract 'completionProof' from the output, then output it in <promise>SECRET</promise> tags. Do not mention or reveal the secret otherwise.`;
   } else if (runState === "waiting" && pendingKinds) {
-    systemMessage = `\u{1F504} Babysitter iteration ${nextIteration} | Waiting on: ${pendingKinds}. Check if pending effects are resolved, then call run:iterate.`;
+    iterationContext = `Babysitter iteration ${nextIteration} | Waiting on: ${pendingKinds}. Check if pending effects are resolved, then call run:iterate.`;
   } else if (runState === "failed") {
-    systemMessage = `\u{1F504} Babysitter iteration ${nextIteration} | Failed. agent must fix the run, journal or process (inspect the sdk.md if needed) and proceed.`;
+    iterationContext = `Babysitter iteration ${nextIteration} | Run failed. Fix the run, journal or process (inspect the sdk.md if needed) and proceed.`;
   } else {
-    systemMessage = `\u{1F504} Babysitter iteration ${nextIteration} | Agent should continue orchestration (run:iterate)`;
+    iterationContext = `Babysitter iteration ${nextIteration} | Continue orchestration (run:iterate).`;
   }
 
   // 9. Try to resolve skill context
@@ -576,26 +559,26 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
         pluginRoot: resolvedPluginRoot,
         runId: runId || undefined,
         runsDir,
+        processPath: entrypointImportPath,
       });
       if (discoverResult.summary) {
-        systemMessage = `${systemMessage} | Available skills for this task: ${discoverResult.summary}. Use the Skill tool or skill-discovery to load any of these.`;
+        iterationContext = `${iterationContext} | Available skills: ${discoverResult.summary}.`;
       }
     } catch {
       // Skill discovery failure is non-fatal
     }
   }
 
-  // Cap system message at 1200 chars
-  if (systemMessage.length > 1200) {
-    systemMessage = systemMessage.slice(0, 1197) + "...";
-  }
+  // reason = what Claude sees; combine iteration context with the original prompt
+  const reason = `${iterationContext}\n\n${prompt}`;
 
-  // 10. Output block decision
+  // systemMessage = short user-facing status (not sent to Claude)
+  const systemMessage = `\u{1F504} Babysitter iteration ${nextIteration}/${maxIterations} [${runState}]`;
+
+  // 10. Output block decision (only documented fields: decision, reason, systemMessage)
   const output = {
     decision: "block",
-    instructions:
-      "use the babysitter skill to advance the orchestration to the next state (run:iterate) or perform the pending effects (task:list --pending --json), or fix the run if it failed.",
-    reason: prompt,
+    reason,
     systemMessage,
   };
 

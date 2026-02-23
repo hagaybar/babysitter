@@ -146,27 +146,28 @@ describe("handleHookRun stop", () => {
     json: true,
   };
 
-  it("approves when no session ID in input", async () => {
+  it("allows exit when no session ID in input", async () => {
     const code = await callWithStdin(JSON.stringify({}), {
       ...baseArgs,
       stateDir,
     });
     expect(code).toBe(0);
     const output = JSON.parse(getStdout().trim());
-    expect(output.decision).toBe("approve");
+    // Adapter outputs empty object for approve (no decision field)
+    expect(output.decision).toBeUndefined();
   });
 
-  it("approves when no session state file exists", async () => {
+  it("allows exit when no session state file exists", async () => {
     const code = await callWithStdin(
       JSON.stringify({ session_id: "nonexistent-session" }),
       { ...baseArgs, stateDir },
     );
     expect(code).toBe(0);
     const output = JSON.parse(getStdout().trim());
-    expect(output.decision).toBe("approve");
+    expect(output.decision).toBeUndefined();
   });
 
-  it("approves when max iterations reached", async () => {
+  it("allows exit when max iterations reached", async () => {
     const sessionId = "max-iter-session";
     const filePath = getSessionFilePath(stateDir, sessionId);
     const now = getCurrentTimestamp();
@@ -187,10 +188,10 @@ describe("handleHookRun stop", () => {
     );
     expect(code).toBe(0);
     const output = JSON.parse(getStdout().trim());
-    expect(output.decision).toBe("approve");
+    expect(output.decision).toBeUndefined();
   });
 
-  it("approves when no run is associated", async () => {
+  it("allows exit when no run is associated", async () => {
     const sessionId = "no-run-session";
     const filePath = getSessionFilePath(stateDir, sessionId);
     const now = getCurrentTimestamp();
@@ -217,7 +218,7 @@ describe("handleHookRun stop", () => {
     );
     expect(code).toBe(0);
     const output = JSON.parse(getStdout().trim());
-    expect(output.decision).toBe("approve");
+    expect(output.decision).toBeUndefined();
   });
 
   it("blocks when session is active with run and transcript", async () => {
@@ -281,7 +282,7 @@ describe("handleHookRun stop", () => {
     const output = JSON.parse(getStdout().trim());
     expect(output.decision).toBe("block");
     expect(output.systemMessage).toContain("iteration 3");
-    expect(output.instructions).toBeTruthy();
+    expect(output.reason).toBeTruthy();
   });
 });
 
