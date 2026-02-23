@@ -231,12 +231,14 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
   log.setContext("session", sessionId);
   log.info(`Session ID: ${sessionId}`);
 
-  // 2. Resolve pluginRoot and stateDir
+  // 2. Resolve pluginRoot and stateDir (always resolve to absolute paths)
   const pluginRoot =
     args.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || "";
+  const resolvedPluginRoot = pluginRoot ? path.resolve(pluginRoot) : "";
   const stateDir =
-    args.stateDir ||
-    (pluginRoot ? path.join(pluginRoot, "skills", "babysit", "state") : "");
+    args.stateDir
+      ? path.resolve(args.stateDir)
+      : (resolvedPluginRoot ? path.resolve(resolvedPluginRoot, "skills", "babysit", "state") : "");
 
   if (!stateDir) {
     log.warn("Cannot determine state directory — allowing exit");
@@ -249,27 +251,39 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
     return 0;
   }
 
+  log.info(`Resolved pluginRoot: ${resolvedPluginRoot || "(empty)"}`);
+  log.info(`Resolved stateDir: ${stateDir}`);
+
   const runsDir = args.runsDir || ".a5c/runs";
 
-  // 3. Check iteration
-  const filePath = getSessionFilePath(stateDir, sessionId);
-  log.info(`Checking session at: ${filePath}`);
+  // 3. Check iteration — try primary stateDir, then fallback to .a5c/state/
+  let filePath = getSessionFilePath(stateDir, sessionId);
+  log.info(`Checking session file at: ${filePath}`);
 
   let sessionFile;
   try {
     if (!(await sessionFileExists(filePath))) {
-      log.info("No active loop found — allowing exit");
-      if (verbose) {
-        process.stderr.write(
-          `[hook:run stop] No active loop found for session ${sessionId}\n`,
-        );
+      // Fallback: check .a5c/state/ directory
+      const fallbackStateDir = path.resolve(".a5c", "state");
+      const fallbackPath = getSessionFilePath(fallbackStateDir, sessionId);
+      log.info(`Primary state file not found, trying fallback: ${fallbackPath}`);
+      if (await sessionFileExists(fallbackPath)) {
+        filePath = fallbackPath;
+        log.info(`Found session file at fallback path: ${filePath}`);
+      } else {
+        log.info(`No active loop found at primary (${filePath}) or fallback (${fallbackPath}) — allowing exit`);
+        if (verbose) {
+          process.stderr.write(
+            `[hook:run stop] No active loop found for session ${sessionId}\n`,
+          );
+        }
+        process.stdout.write('{"decision":"approve"}\n');
+        return 0;
       }
-      process.stdout.write('{"decision":"approve"}\n');
-      return 0;
     }
     sessionFile = await readSessionFile(filePath);
   } catch {
-    log.warn("Session file read error — allowing exit");
+    log.warn(`Session file read error at ${filePath} — allowing exit`);
     process.stdout.write('{"decision":"approve"}\n');
     return 0;
   }
@@ -556,10 +570,10 @@ async function handleStopHookImpl(args: HookHandlerArgs): Promise<number> {
   }
 
   // 9. Try to resolve skill context
-  if (pluginRoot) {
+  if (resolvedPluginRoot) {
     try {
       const discoverResult = await discoverSkillsInternal({
-        pluginRoot,
+        pluginRoot: resolvedPluginRoot,
         runId: runId || undefined,
         runsDir,
       });
@@ -630,7 +644,10 @@ async function handleSessionStartHookImpl(
     return 0;
   } finally {
     // Unref stdin so it doesn't keep the event loop alive.
-    process.stdin.unref();
+    // Guard: unref() may not exist in all environments (e.g. non-socket stdin).
+    if (typeof process.stdin.unref === "function") {
+      process.stdin.unref();
+    }
   }
 
   const hookInput = parseHookInput(rawInput) as ClaudeCodeSessionStartHookInput;
@@ -661,9 +678,11 @@ async function handleSessionStartHookImpl(
   // 3. Create baseline session state file so the stop hook can find it later.
   const pluginRoot =
     args.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || "";
+  const resolvedPluginRoot = pluginRoot ? path.resolve(pluginRoot) : "";
   const stateDir =
-    args.stateDir ||
-    (pluginRoot ? path.join(pluginRoot, "skills", "babysit", "state") : "");
+    args.stateDir
+      ? path.resolve(args.stateDir)
+      : (resolvedPluginRoot ? path.resolve(resolvedPluginRoot, "skills", "babysit", "state") : "");
 
   if (stateDir) {
     const filePath = getSessionFilePath(stateDir, sessionId);
@@ -715,10 +734,11 @@ async function bindSessionImpl(
 ): Promise<SessionBindResult> {
   const { sessionId, runId, pluginRoot, maxIterations = 256, prompt, verbose } = opts;
 
-  // Resolve state directory
-  let stateDir = opts.stateDir;
-  if (!stateDir && pluginRoot) {
-    stateDir = path.join(pluginRoot, "skills", "babysit", "state");
+  // Resolve state directory (always resolve to absolute paths)
+  const resolvedPluginRoot = pluginRoot ? path.resolve(pluginRoot) : "";
+  let stateDir = opts.stateDir ? path.resolve(opts.stateDir) : "";
+  if (!stateDir && resolvedPluginRoot) {
+    stateDir = path.resolve(resolvedPluginRoot, "skills", "babysit", "state");
   }
   if (!stateDir) {
     return {
@@ -821,14 +841,15 @@ export function createClaudeCodeAdapter(): HarnessAdapter {
     },
 
     resolveStateDir(args: { stateDir?: string; pluginRoot?: string }): string | undefined {
-      if (args.stateDir) return args.stateDir;
+      if (args.stateDir) return path.resolve(args.stateDir);
       const root = args.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT;
-      if (root) return path.join(root, "skills", "babysit", "state");
+      if (root) return path.resolve(root, "skills", "babysit", "state");
       return undefined;
     },
 
     resolvePluginRoot(args: { pluginRoot?: string }): string | undefined {
-      return args.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT || undefined;
+      const root = args.pluginRoot || process.env.CLAUDE_PLUGIN_ROOT;
+      return root ? path.resolve(root) : undefined;
     },
 
     bindSession(opts: SessionBindOptions): Promise<SessionBindResult> {
