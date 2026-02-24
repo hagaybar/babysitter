@@ -204,12 +204,54 @@ export async function process(inputs, ctx) {
 
   let newProjectResult = null;
   if (detectedNewProject) {
+    // Phase 9a: Scaffold the new project (vision, structure, research)
     newProjectResult = await ctx.task(scaffoldNewProjectTask, {
       profile: profileResult.profile,
       toolSelection,
       projectRoot
     });
+
+    // Phase 9b: Breakpoint — review vision document and requirements before proceeding
+    await ctx.breakpoint({
+      question: [
+        '**New Project Scaffolding — Review Required**',
+        '',
+        'The following artifacts have been generated for your new project:',
+        '',
+        '1. **PROJECT.md** — Vision document with project goals and scope',
+        '2. **ROADMAP.md** — Phased milestones and delivery plan',
+        '3. **Requirements** — v1 requirements derived from your goals',
+        '4. **Directory structure** — Initial project layout',
+        '',
+        'Please review these artifacts carefully:',
+        '- Does the vision accurately capture your intent?',
+        '- Are the requirements scoped correctly for v1 vs future work?',
+        '- Does the roadmap have realistic milestones?',
+        '',
+        'Provide corrections or approve to continue.'
+      ].join('\n'),
+      title: 'Vision, Requirements & Roadmap Review',
+      context: {
+        runId: ctx.runId,
+        files: [
+          { path: 'artifacts/project-vision.md', format: 'markdown', label: 'Vision Document' },
+          { path: 'artifacts/project-roadmap.md', format: 'markdown', label: 'Roadmap' },
+          { path: 'artifacts/project-requirements-v1.md', format: 'markdown', label: 'Requirements v1' }
+        ]
+      }
+    });
   }
+
+  // ============================================================================
+  // PHASE 9c: INITIALIZE .a5c/package.json + QUALITY GATES
+  // ============================================================================
+
+  await ctx.task(initializeA5cInfraTask, {
+    projectRoot,
+    profile: profileResult.profile,
+    toolSelection,
+    isNewProject: detectedNewProject
+  });
 
   // ============================================================================
   // PHASE 10: REVIEW BREAKPOINT
@@ -1064,27 +1106,39 @@ export const scaffoldNewProjectTask = defineTask('scaffold-new-project', (args, 
     name: 'general-purpose',
     prompt: {
       role: 'senior project architect and scaffolding specialist',
-      task: 'This is a new or empty project. Set up initial scaffolding based on the project profile, following the gsd/new-project.js vision-capture and stack-research patterns.',
+      task: 'This is a new or empty project. Set up initial scaffolding following the gsd/new-project.js patterns: vision capture, domain research, requirements scoping (v1 vs future), and roadmap creation with phased milestones.',
       context: {
         profile: args.profile,
         toolSelection: args.toolSelection,
         projectRoot: args.projectRoot,
-        gsdNewProjectPattern: 'The gsd/new-project process uses: vision capture -> parallel domain research (stack, features, architecture, pitfalls) -> requirements scoping -> roadmap creation. We apply a lighter version here focused on scaffolding.'
+        gsdNewProjectPattern: 'The gsd/new-project process uses: vision capture -> parallel domain research (stack, features, architecture, pitfalls) -> requirements scoping (v1/v2 separation) -> roadmap creation with milestones.'
       },
       instructions: [
-        'Based on the project profile, create the initial project structure:',
-        '  - Create .a5c/ directory if not present',
-        '  - Create a PROJECT.md with project vision based on profile goals and description',
-        '  - Create a basic ROADMAP.md with initial milestones from profile goals',
-        '  - Set up recommended directory structure based on profile architecture',
-        'If the profile has a tech stack defined:',
-        '  - Initialize the package manager config (package.json, requirements.txt, etc.) if not present',
+        '**1. Vision Capture**: Create PROJECT.md with:',
+        '  - Project vision statement derived from profile goals and description',
+        '  - Problem statement and target audience',
+        '  - Key differentiators and success criteria',
+        '  - Write to artifacts/project-vision.md as well for the review breakpoint',
+        '**2. Domain Research**: Research the chosen tech stack and domain:',
+        '  - Evaluate stack choices (languages, frameworks, databases) for the project goals',
+        '  - Identify common architecture pitfalls for the chosen pattern',
+        '  - List key features and capabilities needed',
+        '  - Note best practices and anti-patterns for the domain',
+        '**3. Requirements Scoping**: Create requirements document:',
+        '  - v1 requirements: essential features for initial release',
+        '  - v2/future requirements: deferred features and nice-to-haves',
+        '  - Non-functional requirements (performance, security, scalability)',
+        '  - Write to artifacts/project-requirements-v1.md for the review breakpoint',
+        '**4. Roadmap Creation**: Create ROADMAP.md with:',
+        '  - Phased milestones derived from v1 requirements',
+        '  - Dependencies between milestones',
+        '  - Write to artifacts/project-roadmap.md for the review breakpoint',
+        '**5. Directory Structure**: Set up recommended layout based on profile architecture',
+        '  - Create .a5c/ and .a5c/processes/ directories',
+        '  - If tech stack defined, initialize package manager config if not present',
         '  - Add recommended development dependencies from tool selection',
-        'Create a .a5c/processes/ directory for project-specific process definitions',
-        'Set up initial babysitter configuration in .a5c/',
         'Do NOT overwrite any existing files',
-        'Do NOT create files that already exist',
-        'Write a summary of scaffolded files to artifacts/new-project-scaffold.md',
+        'Write a summary to artifacts/new-project-scaffold.md',
         'If recommended methodology is available, create a .a5c/methodology.json reference'
       ],
       outputFormat: 'JSON with scaffolded (boolean), filesCreated (array of paths), directoriesCreated (array of paths), visionDocument (string path or null), roadmapDocument (string path or null), skippedFiles (array of paths that already existed)'
@@ -1109,6 +1163,66 @@ export const scaffoldNewProjectTask = defineTask('scaffold-new-project', (args, 
   },
 
   labels: ['agent', 'cradle', 'scaffold', 'new-project']
+}));
+
+/**
+ * Initialize .a5c Infrastructure & Quality Gates Task
+ * Ensures .a5c/package.json exists with babysitter-sdk dependency and configures quality gates
+ */
+export const initializeA5cInfraTask = defineTask('initialize-a5c-infra', (args, taskCtx) => ({
+  kind: 'agent',
+  title: 'Initialize .a5c infrastructure and quality gates',
+  description: 'Create .a5c/package.json with babysitter-sdk dependency, configure quality thresholds, and set up testing/linting enforcement gates',
+
+  agent: {
+    name: 'general-purpose',
+    prompt: {
+      role: 'DevOps engineer specializing in project infrastructure, CI/CD quality gates, and testing standards',
+      task: 'Ensure the .a5c/ directory has a package.json with @a5c-ai/babysitter-sdk as a dependency, and configure quality gates for the project. This task is idempotent — do not overwrite existing configuration, only add what is missing.',
+      context: {
+        projectRoot: args.projectRoot,
+        profile: args.profile,
+        toolSelection: args.toolSelection,
+        isNewProject: args.isNewProject
+      },
+      instructions: [
+        '**1. .a5c/package.json**: Ensure .a5c/package.json exists in the project root:',
+        '  - If it does not exist, create it with name "<projectName>-a5c", version "1.0.0", type "module"',
+        '  - Ensure @a5c-ai/babysitter-sdk is listed as a dependency (use "latest" if no version specified)',
+        '  - Run `cd .a5c && npm install` to install dependencies if package.json was created or modified',
+        '  - Do NOT overwrite an existing package.json — only add missing dependencies',
+        '**2. Quality Gates Configuration**: Create or update .a5c/quality-gates.json:',
+        '  - qualityThreshold: use BABYSITTER_QUALITY_THRESHOLD env var default (80)',
+        '  - testCoverage: set minimum coverage target based on project maturity (new: 60%, existing: match current)',
+        '  - linting: reference the project linting tools from the profile (eslint, prettier, etc.)',
+        '  - formatting: reference formatting tools from the profile',
+        '  - commitChecks: list pre-commit checks (lint, type-check, test) appropriate for the project',
+        '  - deployGates: list deployment gates (tests pass, no lint errors, coverage met)',
+        '  - If profile has CI/CD configured, note quality gate integration points',
+        '**3. Verification**: Confirm .a5c/package.json is valid JSON and dependencies are installable',
+        'IMPORTANT: Always use the babysitter CLI for profile operations — never import SDK profile functions directly'
+      ],
+      outputFormat: 'JSON with packageJsonCreated (boolean), packageJsonPath (string), qualityGatesPath (string), sdkInstalled (boolean), qualityGates (object with configured gates)'
+    },
+    outputSchema: {
+      type: 'object',
+      required: ['packageJsonCreated', 'sdkInstalled'],
+      properties: {
+        packageJsonCreated: { type: 'boolean' },
+        packageJsonPath: { type: 'string' },
+        qualityGatesPath: { type: 'string' },
+        sdkInstalled: { type: 'boolean' },
+        qualityGates: { type: 'object' }
+      }
+    }
+  },
+
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/result.json`
+  },
+
+  labels: ['agent', 'cradle', 'infrastructure', 'quality-gates']
 }));
 
 /**
