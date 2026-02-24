@@ -26,18 +26,9 @@ This release represents a major milestone in the Babysitter project, featuring a
 
 ### Breaking Changes
 
-- **VS Code extension has been fully removed** - Docker is now the primary deployment method, providing better isolation and consistency across environments
-- **Breakpoints service has been completely removed** from the system
+- **Breakpoints service has and vscode extension has been completely removed** from the system
 - **Hook invocation mechanism changed** from shell scripts to SDK CLI commands for better reliability and maintainability
 - **Completion secret renamed to completion proof** throughout the API for clearer semantics
-- **Stop hook event registration changed** from SessionEnd to Stop for correct lifecycle handling
-- **Profile operations must use CLI commands exclusively** - direct SDK usage is no longer supported
-
-### Deprecations
-
-- VS Code extension deprecated in favor of Docker deployment
-- Shell script wrappers in `babysit/scripts` removed in favor of CLI commands
-- Legacy hook discovery mechanism replaced with JSDoc-based process discovery
 
 ### Added
 
@@ -54,7 +45,7 @@ This release represents a major milestone in the Babysitter project, featuring a
 - **Support for persisting initial prompt** in `run.json` and `RUN_CREATED` events
 
 #### Infrastructure
-- **Docker support** as the primary deployment method with comprehensive E2E testing
+- **Docker support** as a deployment method with comprehensive E2E testing
 - **Staging publish workflow** for better release management
 
 #### UI
@@ -63,15 +54,12 @@ This release represents a major milestone in the Babysitter project, featuring a
 ### Fixed
 
 #### Hook System
-- **Profile operations** now require CLI commands and never use SDK directly for consistency
 - **Stop hook** no longer bails on empty prompts when run is bound to a session
 - **Stop hook** now uses `last_assistant_message` fallback for better reliability
-- **Stop hook** registered on Stop event instead of SessionEnd for correct lifecycle handling
 - **Stop hook skill context** improved by excluding babysit and showing full paths
 - **Session-start hook** now creates baseline state file proactively
 - **Session-start hook** prevents hanging by ensuring clean stdin EOF handling
 - **Session-start hook** installs babysitter CLI from correct SDK version
-- **Hook decision output** now uses 'approve' instead of 'allow' for clarity
 
 #### State Management
 - **State cache** is now rebuilt after terminal events ensuring data consistency
@@ -86,10 +74,6 @@ This release represents a major milestone in the Babysitter project, featuring a
 - **Irrelevant specialization skills** excluded from discovery with capped summary length
 - **Harness CLI flag** is now respected for adapter selection in `run:create`
 - **Run directory resolution** improved with doubled `.a5c` path collapsing
-
-#### Docker & Permissions
-- **Workspace** is now world-writable for Docker UID mismatch handling
-- **File permission issues** resolved with chmod on copied Claude session directories
 
 #### Testing
 - **Session transcript format handling** fixed for real Claude Code output
