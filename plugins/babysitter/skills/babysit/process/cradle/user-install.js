@@ -520,7 +520,8 @@ export const buildProfileTask = defineTask('build-profile', (args, taskCtx) => (
         'Set version to existing version + 1 if updating, or 1 if new',
         'Generate unique IDs for goals (use format: goal-<category>-<index>)',
         'Also generate a list of available specialization categories from the process library for tool selection',
-        'Write the preview profile to artifacts/user-profile-preview.json for the review breakpoint'
+        'Write the preview profile to artifacts/user-profile-preview.json for the review breakpoint (this is a run artifact, NOT the actual profile — the actual profile is written later by the save task using `babysitter profile:write`)',
+        'Do NOT write to ~/.a5c/user-profile.json or any profile path directly — that is the save task\'s job via the CLI'
       ],
       outputFormat: 'JSON with profile (complete UserProfile object), availableSpecializations (array of category names from the process library), changesSummary (string describing what was new/changed)'
     },
@@ -699,35 +700,36 @@ export const configureUserTask = defineTask('configure-user', (args, taskCtx) =>
 
 /**
  * Save Profile Task
- * Write the final approved profile to disk
+ * Save the final approved profile using the babysitter CLI
  */
 export const saveProfileTask = defineTask('save-profile', (args, taskCtx) => ({
   kind: 'agent',
-  title: 'Save user profile to disk',
-  description: 'Write the final approved user profile and configuration to disk atomically',
+  title: 'Save user profile via babysitter CLI',
+  description: 'Save the final approved user profile using `babysitter profile:write` CLI command. Never write profile files directly.',
 
   agent: {
     name: 'general-purpose',
     prompt: {
-      role: 'system administrator specializing in atomic file operations and configuration management',
-      task: 'Write the final user profile and configuration to disk. This is the last step - the profile has been approved by the user.',
+      role: 'CLI automation specialist — you ONLY use the babysitter CLI to manage profiles, never direct file writes',
+      task: 'Save the final user profile using the babysitter CLI. The profile has been approved by the user. You MUST use `babysitter profile:write` — do NOT write profile JSON or markdown files directly.',
       context: {
         profile: args.profile,
         toolSelection: args.toolSelection,
         configResult: args.configResult,
         profileDir: args.profileDir,
-        defaultProfileDir: '~/.a5c/'
+        defaultProfileDir: '~/.a5c/',
+        cliCommand: 'babysitter profile:write --user --input <file> [--dir <dir>] --json'
       },
       instructions: [
-        'Write the profile JSON to a temporary file (e.g., /tmp/user-profile-final.json)',
-        'Run `babysitter profile:write --user --input /tmp/user-profile-final.json --json` to write the profile (add `--dir <dir>` if a custom profileDir is provided)',
-        'The CLI handles atomic writes, directory creation, and markdown generation automatically',
-        'Write the configuration to config.json in the profile directory (mkdir -p ~/.a5c/ or custom profileDir first)',
-        'If a tool-recommendations.json was generated, ensure it is saved alongside the profile',
-        'Run `babysitter profile:read --user --json` to verify the written profile can be read back successfully',
-        'Clean up the temporary file',
-        'Report the full paths of all files written',
-        'IMPORTANT: Always use the babysitter CLI for profile operations — never import SDK profile functions directly'
+        'CRITICAL: You MUST use the babysitter CLI for all profile operations. Do NOT use fs.writeFile, echo >, or any other method to write profile JSON or markdown files directly.',
+        'Step 1: Write the profile JSON object to a temporary file: echo \'<profile-json>\' > /tmp/user-profile-final.json',
+        'Step 2: Run `babysitter profile:write --user --input /tmp/user-profile-final.json --json` (add `--dir <profileDir>` if a custom profileDir was provided)',
+        'Step 3: The CLI automatically handles: atomic writes, directory creation (~/.a5c/), markdown generation (user-profile.md), and file permissions',
+        'Step 4: Run `babysitter profile:read --user --json` to verify the profile was saved correctly (add `--dir <profileDir>` if custom)',
+        'Step 5: Write any additional config files (config.json, tool-recommendations.json) to the profile directory using mkdir -p and standard file writes — these are NOT profile files so CLI is not needed for them',
+        'Step 6: Clean up /tmp/user-profile-final.json',
+        'Step 7: Report all file paths written',
+        'REMINDER: The only way to write the user profile is via `babysitter profile:write`. If you find yourself writing to user-profile.json directly, STOP and use the CLI instead.'
       ],
       outputFormat: 'JSON with savedProfile (the profile object as written), configPath (string), markdownPath (string), filesWritten (array of full paths), bytesWritten (number), verified (boolean)'
     },

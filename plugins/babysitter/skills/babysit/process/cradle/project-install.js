@@ -817,7 +817,8 @@ export const buildProfileTask = defineTask('build-profile', (args, taskCtx) => (
         'Generate unique IDs for pain points (format: pp-<category>-<index>)',
         'Generate unique IDs for bottlenecks (format: bn-<location>-<index>)',
         'Merge arrays by deduplicating on id/name fields, not replacing entire arrays',
-        'Write the preview profile to artifacts/project-profile-preview.json for the review breakpoint'
+        'Write the preview profile to artifacts/project-profile-preview.json for the review breakpoint (this is a run artifact, NOT the actual profile — the actual profile is written later by the save task using `babysitter profile:write`)',
+        'Do NOT write to .a5c/project-profile.json or any profile path directly — that is the save task\'s job via the CLI'
       ],
       outputFormat: 'JSON with profile (complete ProjectProfile object), changesSummary (string describing what was new/changed), sourcesUsed (array of strings indicating which data sources contributed)'
     },
@@ -1227,18 +1228,18 @@ export const initializeA5cInfraTask = defineTask('initialize-a5c-infra', (args, 
 
 /**
  * Save Profile Task
- * Write the final approved project profile to disk
+ * Save the final approved project profile using the babysitter CLI
  */
 export const saveProfileTask = defineTask('save-profile', (args, taskCtx) => ({
   kind: 'agent',
-  title: 'Save project profile to disk',
-  description: 'Write the final approved project profile and configuration to .a5c/project-profile.json and .a5c/project-profile.md atomically',
+  title: 'Save project profile via babysitter CLI',
+  description: 'Save the final approved project profile using `babysitter profile:write` CLI command. Never write profile files directly.',
 
   agent: {
     name: 'general-purpose',
     prompt: {
-      role: 'system administrator specializing in atomic file operations and configuration management',
-      task: 'Write the final project profile and configuration to disk. This is the last step - the profile has been approved by the user.',
+      role: 'CLI automation specialist — you ONLY use the babysitter CLI to manage profiles, never direct file writes',
+      task: 'Save the final project profile using the babysitter CLI. The profile has been approved by the user. You MUST use `babysitter profile:write` — do NOT write profile JSON or markdown files directly.',
       context: {
         profile: args.profile,
         toolSelection: args.toolSelection,
@@ -1246,21 +1247,23 @@ export const saveProfileTask = defineTask('save-profile', (args, taskCtx) => ({
         claudeMdResult: args.claudeMdResult,
         newProjectResult: args.newProjectResult,
         projectRoot: args.projectRoot,
-        defaultProfileDir: '.a5c/'
+        defaultProfileDir: '.a5c/',
+        cliCommand: 'babysitter profile:write --project --input <file> [--dir <dir>] --json'
       },
       instructions: [
-        'Finalize the profile with any last updates from CI/CD and CLAUDE.md results:',
+        'CRITICAL: You MUST use the babysitter CLI for all profile operations. Do NOT use fs.writeFile, echo >, or any other method to write project-profile.json or project-profile.md directly.',
+        'Step 1: Finalize the profile with any last updates from CI/CD and CLAUDE.md results:',
         '  - If CI/CD was configured, ensure profile.cicd.babysitterIntegration is updated',
         '  - If CLAUDE.md was updated, ensure profile.claudeMdInstructions is populated',
         '  - Update profile.installedSkills, installedAgents, installedProcesses from tool selection',
         '  - Ensure updatedAt is set to current timestamp',
-        'Write the finalized profile JSON to a temporary file (e.g., /tmp/project-profile-final.json)',
-        'Run `babysitter profile:write --project --input /tmp/project-profile-final.json --json` to write the profile (add `--dir <dir>` if a custom projectRoot is provided)',
-        'The CLI handles atomic writes, directory creation, and markdown generation automatically',
-        'Run `babysitter profile:read --project --json` to verify the written profile can be read back successfully',
-        'Clean up the temporary file',
-        'Report the full paths of all files written',
-        'IMPORTANT: Always use the babysitter CLI for profile operations — never import SDK profile functions directly'
+        'Step 2: Write the finalized profile JSON object to a temporary file: echo \'<profile-json>\' > /tmp/project-profile-final.json',
+        'Step 3: Run `babysitter profile:write --project --input /tmp/project-profile-final.json --json` (add `--dir <projectRoot>` if a custom projectRoot was provided)',
+        'Step 4: The CLI automatically handles: atomic writes, directory creation (.a5c/), markdown generation (project-profile.md), and file permissions',
+        'Step 5: Run `babysitter profile:read --project --json` to verify the profile was saved correctly (add `--dir <projectRoot>` if custom)',
+        'Step 6: Clean up /tmp/project-profile-final.json',
+        'Step 7: Report all file paths written',
+        'REMINDER: The only way to write the project profile is via `babysitter profile:write`. If you find yourself writing to project-profile.json directly, STOP and use the CLI instead.'
       ],
       outputFormat: 'JSON with savedProfile (the profile object as written), profileJsonPath (string), profileMdPath (string), filesWritten (array of full paths), bytesWritten (number), verified (boolean)'
     },
