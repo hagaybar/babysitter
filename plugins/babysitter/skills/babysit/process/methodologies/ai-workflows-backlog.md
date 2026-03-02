@@ -20,7 +20,7 @@
 
 [x] https://github.com/ruvnet/ruflo
 
-[ ] https://github.com/huytieu/COG-second-brain
+[x] https://github.com/huytieu/COG-second-brain
 
 [ ] https://github.com/carlrannaberg/claudekit
 
