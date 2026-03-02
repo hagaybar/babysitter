@@ -26,7 +26,7 @@
 
 [x] https://github.com/OthmanAdi/planning-with-files
 
-[ ] https://github.com/github/spec-kit
+[x] https://github.com/github/spec-kit
 
 [ ] https://github.com/AutoMaker-Org/automaker
 
