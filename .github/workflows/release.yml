@@ -158,6 +158,17 @@ jobs:
           set -euo pipefail
           npm publish --workspace=@a5c-ai/babysitter-sdk --access public
 
+      - name: Inject SDK dependency into metapackage for publish
+        run: |
+          set -euo pipefail
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('packages/babysitter/package.json', 'utf8'));
+            pkg.dependencies = pkg.dependencies || {};
+            pkg.dependencies['@a5c-ai/babysitter-sdk'] = pkg.version;
+            fs.writeFileSync('packages/babysitter/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
       - name: Publish babysitter metapackage to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

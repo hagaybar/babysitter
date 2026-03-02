@@ -11,9 +11,7 @@
     "bin/",
     "README.md"
   ],
-  "dependencies": {
-    "@a5c-ai/babysitter-sdk": "latest"
-  },
+  "dependencies": {},
   "repository": {
     "type": "git",
     "url": "https://github.com/a5c-ai/babysitter.git"

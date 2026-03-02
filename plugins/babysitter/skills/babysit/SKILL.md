@@ -426,9 +426,13 @@ If at any point the run fails due to SDK issues or corrupted state or journal. a
 
 - The process should be a comprehensive and complete solution to the user request. it should not be a partial solution or a work in progress. it should be a complete and working solution that can be used to test the functionality of the app as we go.
 
+- the process should usally be a composition (in code) of multiple processes from the process library (not just one), for multiple phases and parts of the process, each utilizing a different process from the library as a reference. in order to perform the user request in the most accurate and robust process that utilizes the best-practices from the library in every part.
+
 - include verification and refinement steps (and loops) for planning phases and integration phases, debugging phases, refactoring phases, etc. as well.
 
-- Create the process with the available skills and subagents.
+- Create the process with (and around) the available skills and subagents. (check which are available first and use discover to allow)
+
+- Prefer incremental work that allows testing and experimentation with the new functionality of the work or app as we go. for example, when building a new feature, prefer building it in a way that allows testing it with a simple script or a simple page in the frontend before integrating it to the main pages and flows of the app.
 
 ### Process File Discovery Markers
 
