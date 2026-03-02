@@ -26,12 +26,6 @@ Major release featuring a complete hook system overhaul, Docker-based deployment
 
 Thank you for the active contributions and support: @YoavMayer , @MaTriXy , @guyelia , @Eyaldavid7 , @giladw , @yosit , @lorg , @davidt99 , @OriAshkenazi , @hexelon and others!
 
-### Breaking Changes
-
-- **Breakpoints service and VS Code extension completely removed** from the system
-- **Hook invocation mechanism changed** from shell scripts to SDK CLI `hook:run` command for better reliability and maintainability
-- **Completion secret renamed to completion proof** throughout the API for clearer semantics
-
 ### Added
 
 #### Slash Commands
@@ -75,6 +69,9 @@ Thank you for the active contributions and support: @YoavMayer , @MaTriXy , @guy
 #### Infrastructure
 - **Docker support** as primary deployment method with comprehensive E2E testing
 - **Staging publish workflow** for better release management
+- **Breakpoints service and VS Code extension completely removed** from the system
+- **Hook invocation mechanism changed** from shell scripts to SDK CLI `hook:run` command for better reliability and maintainability
+- **Completion secret renamed to completion proof** throughout the API for clearer semantics
 
 #### UI
 - **Revamped UI components** with modern Sci-Fi neon theme
