@@ -12,10 +12,10 @@ Orchestrate `.a5c/runs/<runId>/` through iterative execution. Use the SDK CLI to
 
 ### Babysitter SDK and CLI
 
-Read the SDK version from the plugin manifest to ensure version compatibility:
+Read the SDK version from versions.json to ensure version compatibility:
 
 ```bash
-SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${CLAUDE_PLUGIN_ROOT}/plugin.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}")
+SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${CLAUDE_PLUGIN_ROOT}/versions.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}")
 sudo npm i -g @a5c-ai/babysitter-sdk@$SDK_VERSION
 # sudo is depending on the env and system
 ```
@@ -212,6 +212,12 @@ IMPORTANT:
 - Include in the instructions to the agent or skill to perform the task in full and return the only the summary result in the requested schema.
 
 #### 5.1 Breakpoint Handling
+
+you are running in interactive mode by default, no matter what the user profile says about the breakpoint tolerance or what the user answered in previos breakpoints. 
+
+CRITICAL RULE: ONLY if the AskUserQuestion tool is not in the list of available tools (like when running with -p flag or if the tool is not available for some reason), you will be running in non-interactive mode. 
+
+You should never resolve a breakpoint by yourself without passing through the AskUserQuestion tool when it is in the list.
 
 ##### 5.1.1 Interactive mode
 

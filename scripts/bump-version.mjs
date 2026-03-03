@@ -27,7 +27,7 @@ const packageManifests = [
 ];
 
 const pluginManifests = [
-  { path: "plugins/babysitter/.claude-plugin/plugin.json", skipSdkVersion: true },
+  { path: "plugins/babysitter/.claude-plugin/plugin.json" },
   { path: "plugins/babysitter/plugin.json" },
 ];
 
@@ -70,13 +70,17 @@ for (const pluginManifest of pluginManifestData) {
   const currentPluginVersion = pluginManifest.data.version;
   const newPluginVersion = bumpVersion(currentPluginVersion, bumpTarget);
   pluginManifest.data.version = newPluginVersion;
-  // Only write sdkVersion to internal manifests, not to .claude-plugin/plugin.json
-  // (Claude Code's plugin validator rejects unrecognized keys)
-  if (!pluginManifest.skipSdkVersion) {
-    pluginManifest.data.sdkVersion = newVersion;
-  }
   writeFileSync(pluginManifest.path, `${JSON.stringify(pluginManifest.data, null, 2)}\n`);
 }
+
+// Write sdkVersion to versions.json (separate from plugin.json to avoid
+// Claude Code's plugin validator rejecting unrecognized keys)
+const versionsPath = "plugins/babysitter/versions.json";
+const versionsData = existsSync(versionsPath)
+  ? JSON.parse(readFileSync(versionsPath, "utf8"))
+  : {};
+versionsData.sdkVersion = newVersion;
+writeFileSync(versionsPath, `${JSON.stringify(versionsData, null, 2)}\n`);
 
 // Update marketplace.json plugin entry - bump from its current version
 const marketplacePath = ".claude-plugin/marketplace.json";

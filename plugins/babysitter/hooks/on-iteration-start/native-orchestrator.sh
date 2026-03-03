@@ -22,7 +22,7 @@ if command -v babysitter &>/dev/null; then
   CLI=(babysitter)
 else
   _PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$(dirname "$(dirname "$0")")")" && pwd)}"
-  SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$_PLUGIN_ROOT/plugin.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}" 2>/dev/null || echo "latest")
+  SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('$_PLUGIN_ROOT/versions.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}" 2>/dev/null || echo "latest")
   CLI=(npx -y "@a5c-ai/babysitter-sdk@$SDK_VERSION")
 fi
 

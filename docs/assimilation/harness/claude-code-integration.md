@@ -175,7 +175,7 @@ babysitter-session-start-hook.sh
         |       |
         |       +-- [not found] Check MARKER_FILE (.babysitter-install-attempted)
         |       |       |
-        |       |       +-- [no marker] Read sdkVersion from plugin.json
+        |       |       +-- [no marker] Read sdkVersion from versions.json
         |       |       |       |
         |       |       |       +-- Try: npm i -g @a5c-ai/babysitter-sdk@{version}
         |       |       |       |

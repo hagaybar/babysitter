@@ -1,6 +1,6 @@
 #!/bin/bash
 # Babysitter Session Start Hook - delegates to SDK CLI
-# Ensures the babysitter CLI is installed (from plugin.json sdkVersion),
+# Ensures the babysitter CLI is installed (from versions.json sdkVersion),
 # then delegates to the TypeScript handler.
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -16,7 +16,7 @@ echo "[INFO] $(date -u +%Y-%m-%dT%H:%M:%SZ) PLUGIN_ROOT=$PLUGIN_ROOT" >> "$LOG_F
 # Install babysitter CLI if not available (only attempt once per plugin install)
 if ! command -v babysitter &>/dev/null; then
   if [ ! -f "$MARKER_FILE" ]; then
-    SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${PLUGIN_ROOT}/plugin.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}" 2>/dev/null || echo "latest")
+    SDK_VERSION=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${PLUGIN_ROOT}/versions.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}" 2>/dev/null || echo "latest")
     # Try global install first, fall back to user-local if permissions fail
     if npm i -g "@a5c-ai/babysitter-sdk@${SDK_VERSION}" --loglevel=error 2>/dev/null; then
       echo "[INFO] $(date -u +%Y-%m-%dT%H:%M:%SZ) Installed SDK globally (${SDK_VERSION})" >> "$LOG_FILE" 2>/dev/null
@@ -30,7 +30,7 @@ if ! command -v babysitter &>/dev/null; then
   fi
   # If still not available after install attempt, try npx as last resort
   if ! command -v babysitter &>/dev/null; then
-    SDK_VERSION=${SDK_VERSION:-$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${PLUGIN_ROOT}/plugin.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}" 2>/dev/null || echo "latest")}
+    SDK_VERSION=${SDK_VERSION:-$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('${PLUGIN_ROOT}/versions.json','utf8')).sdkVersion||'latest')}catch{console.log('latest')}" 2>/dev/null || echo "latest")}
     echo "[INFO] $(date -u +%Y-%m-%dT%H:%M:%SZ) CLI not found after install, using npx fallback" >> "$LOG_FILE" 2>/dev/null
     babysitter() { npx -y "@a5c-ai/babysitter-sdk@${SDK_VERSION}" "$@"; }
     export -f babysitter
