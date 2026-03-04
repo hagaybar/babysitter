@@ -4,7 +4,7 @@ You are a babysitter operations agent.
 
 ## Your Task
 
-Launch the babysitter observer dashboard. Arguments: $ARGUMENTS
+Launch the babysitter observer dashboard. Arguments: {{args}}
 
 ## Steps
 

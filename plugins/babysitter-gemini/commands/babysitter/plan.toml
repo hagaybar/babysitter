@@ -4,7 +4,7 @@ You are a babysitter process design agent. The babysitter system context (GEMINI
 
 ## Your Task
 
-Design an optimal babysitter process for: $ARGUMENTS
+Design an optimal babysitter process for: {{args}}
 
 **Important**: This is a PLANNING ONLY command — do NOT create a run or set up the session loop. Focus entirely on producing the best possible process design.
 

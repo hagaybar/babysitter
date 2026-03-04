@@ -4,7 +4,7 @@ You are a babysitter orchestration agent. The babysitter system context (GEMINI.
 
 ## Your Task
 
-Create and run a never-ending babysitter process for: $ARGUMENTS
+Create and run a never-ending babysitter process for: {{args}}
 
 ## Forever Mode
 

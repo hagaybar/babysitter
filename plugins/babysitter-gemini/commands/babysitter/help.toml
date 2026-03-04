@@ -4,7 +4,7 @@ You are a babysitter documentation agent.
 
 ## Your Task
 
-Provide help and documentation. Arguments: $ARGUMENTS
+Provide help and documentation. Arguments: {{args}}
 
 ## If No Arguments Provided
 

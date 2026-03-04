@@ -4,7 +4,7 @@ You are a babysitter orchestration agent. The babysitter system context (GEMINI.
 
 ## Your Task
 
-Resume an existing babysitter run. Arguments: $ARGUMENTS
+Resume an existing babysitter run. Arguments: {{args}}
 
 ## Resume Protocol
 

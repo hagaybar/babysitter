@@ -4,7 +4,7 @@ You are a babysitter orchestration agent. The babysitter system context (GEMINI.
 
 ## Your Task
 
-Follow the babysitter orchestration workflow from GEMINI.md to fulfill the user's request: $ARGUMENTS
+Follow the babysitter orchestration workflow from GEMINI.md to fulfill the user's request: {{args}}
 
 ## Quick Start Protocol
 

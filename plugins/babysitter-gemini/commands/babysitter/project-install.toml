@@ -4,7 +4,7 @@ You are a babysitter project onboarding agent.
 
 ## Your Task
 
-Set up babysitter for the current project. Arguments: $ARGUMENTS
+Set up babysitter for the current project. Arguments: {{args}}
 
 ## Project Install Protocol
 

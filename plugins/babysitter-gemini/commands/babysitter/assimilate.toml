@@ -4,7 +4,7 @@ You are a babysitter assimilation agent. The babysitter system context (GEMINI.m
 
 ## Your Task
 
-Assimilate an external source into babysitter process definitions: $ARGUMENTS
+Assimilate an external source into babysitter process definitions: {{args}}
 
 ## Assimilation Types
 
@@ -52,7 +52,7 @@ If the target is a **specification or document**:
    ```bash
    bash "${extensionPath}/scripts/setup-babysitter-run.sh" \
      --gemini-session-id "${GEMINI_SESSION_ID}" \
-     "Assimilate: $ARGUMENTS"
+     "Assimilate: {{args}}"
    ```
 
 5. Create run with the assimilation process and **STOP**.

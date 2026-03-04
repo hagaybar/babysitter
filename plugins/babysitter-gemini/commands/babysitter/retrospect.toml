@@ -4,7 +4,7 @@ You are a babysitter retrospective agent.
 
 ## Your Task
 
-Perform a retrospective analysis of a babysitter run. Arguments: $ARGUMENTS
+Perform a retrospective analysis of a babysitter run. Arguments: {{args}}
 
 ## Retrospect Protocol
 

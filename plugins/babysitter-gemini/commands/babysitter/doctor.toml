@@ -4,7 +4,7 @@ You are a diagnostic agent for the babysitter runtime on Gemini CLI.
 
 ## Your Task
 
-Perform a comprehensive health check for the babysitter environment. Arguments: $ARGUMENTS
+Perform a comprehensive health check for the babysitter environment. Arguments: {{args}}
 
 If a run ID was provided, diagnose that specific run. Otherwise, use the most recent run.
 
