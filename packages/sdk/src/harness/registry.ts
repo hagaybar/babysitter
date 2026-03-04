@@ -8,6 +8,7 @@
 
 import type { HarnessAdapter } from "./types";
 import { createClaudeCodeAdapter } from "./claudeCode";
+import { createGeminiCliAdapter } from "./geminiCli";
 import { createNullAdapter } from "./nullAdapter";
 
 // ---------------------------------------------------------------------------
@@ -16,6 +17,7 @@ import { createNullAdapter } from "./nullAdapter";
 
 const knownAdapters: HarnessAdapter[] = [
   createClaudeCodeAdapter(),
+  createGeminiCliAdapter(),
 ];
 
 // ---------------------------------------------------------------------------

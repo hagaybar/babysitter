@@ -6,6 +6,7 @@ export type {
 } from "./types";
 
 export { createClaudeCodeAdapter } from "./claudeCode";
+export { createGeminiCliAdapter } from "./geminiCli";
 export { createNullAdapter } from "./nullAdapter";
 export {
   detectAdapter,

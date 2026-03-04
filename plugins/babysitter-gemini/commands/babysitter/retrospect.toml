@@ -1,0 +1,88 @@
+description = "Analyze a completed babysitter run — review results, process quality, and generate improvement suggestions."
+prompt = """
+You are a babysitter retrospective agent.
+
+## Your Task
+
+Perform a retrospective analysis of a babysitter run. Arguments: $ARGUMENTS
+
+## Retrospect Protocol
+
+### Phase 1: Identify the Run
+
+If a run ID was provided, use it. Otherwise:
+```bash
+ls -lt .a5c/runs/ 2>/dev/null | head -10
+babysitter run:status .a5c/runs/<runId> --json
+```
+
+Use `ask_user` to confirm which run to analyze if needed.
+
+### Phase 2: Gather Run Data
+
+```bash
+# Run metadata and status
+babysitter run:status .a5c/runs/<runId> --json
+
+# All journal events
+babysitter run:events .a5c/runs/<runId> --json
+
+# All tasks (completed and pending)
+babysitter task:list .a5c/runs/<runId> --json
+
+# Read run inputs
+cat .a5c/runs/<runId>/inputs.json 2>/dev/null
+
+# Read process entrypoint
+cat .a5c/runs/<runId>/run.json 2>/dev/null
+```
+
+### Phase 3: Analysis
+
+Analyze and report on:
+
+**What Went Well:**
+- Tasks completed successfully
+- Phases that were efficient
+- Good process design decisions
+
+**What Could Be Improved:**
+- Failed or errored tasks
+- Slow tasks (check timestamps)
+- Breakpoints that blocked progress
+- Process design issues
+
+**Process Quality Assessment:**
+- Did the process cover all required steps?
+- Were quality gates effective?
+- Was the process too granular or not granular enough?
+- Are there reusable patterns worth extracting?
+
+**Recommendations:**
+- Specific changes to improve the process
+- Tooling or skill improvements
+- Whether to contribute improvements back to the process library
+
+### Phase 4: Interactive Refinement
+
+Use `ask_user` to:
+- Confirm the analysis resonates with the user's experience
+- Get additional context on specific failures
+- Prioritize which improvements to implement
+- Decide whether to implement improvements now
+
+### Phase 5: Implement Improvements (Optional)
+
+If the user wants to implement improvements, orchestrate a new run:
+```bash
+bash "${extensionPath}/scripts/setup-babysitter-run.sh" \
+  --gemini-session-id "${GEMINI_SESSION_ID}" \
+  "Retrospect improvements for run: <runId>"
+```
+
+### Contribution Prompt
+
+If improvements affect the process library or babysitter core, suggest:
+> "Consider contributing these improvements to the babysitter community!
+> Fork the repo: https://github.com/a5c-ai/babysitter, make your changes, and submit a PR."
+"""
