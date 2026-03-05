@@ -96,6 +96,9 @@ This document defines the navigation structure for the Babysitter User Guide doc
 - section: Reference
   path: /reference/
   items:
+    - title: Slash Commands
+      path: /reference/slash-commands.md
+      highlight: true
     - title: CLI Reference
       path: /reference/cli-reference.md
     - title: Configuration
@@ -168,6 +171,7 @@ For documentation platforms that use JSON configuration (e.g., Docusaurus, ViteP
         "label": "Reference",
         "position": "left",
         "items": [
+          { "label": "Slash Commands", "to": "/reference/slash-commands" },
           { "label": "CLI Reference", "to": "/reference/cli-reference" },
           { "label": "Configuration", "to": "/reference/configuration" },
           { "label": "Error Catalog", "to": "/reference/error-catalog" },
@@ -231,6 +235,7 @@ For documentation platforms that use JSON configuration (e.g., Docusaurus, ViteP
         "label": "Reference",
         "collapsed": false,
         "items": [
+          "reference/slash-commands",
           "reference/cli-reference",
           "reference/configuration",
           "reference/error-catalog",

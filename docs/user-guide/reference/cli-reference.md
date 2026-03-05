@@ -4,7 +4,9 @@
 **SDK Version:** 0.0.123+
 **Last Updated:** 2026-01-25
 
-Complete reference documentation for the Babysitter command-line interface.
+Complete reference documentation for the Babysitter command-line interface (SDK CLI).
+
+> **Looking for slash commands?** See [Slash Commands Reference](./slash-commands.md) for `/babysitter:call`, `/babysitter:yolo`, and other Claude Code commands.
 
 ---
 

@@ -331,6 +331,29 @@ Let's recap what Babysitter did for you:
 
 ---
 
+## Bonus: Try Different Modes
+
+You just used `/babysitter:call` — the default interactive mode. Babysitter has four modes, each with different levels of autonomy:
+
+| Mode | Command | When to Use |
+|------|---------|-------------|
+| **Interactive** | `/babysitter:call` | What you just used. Pauses for approval. |
+| **YOLO** | `/babysitter:yolo` | Full auto. Ship while you sleep. |
+| **Forever** | `/babysitter:forever` | Never-ending loops for monitoring tasks. |
+| **Plan** | `/babysitter:plan` | Review the process before executing. |
+
+**Try YOLO mode** for a trusted task:
+
+```
+/babysitter:yolo add input validation to all form fields
+```
+
+No breakpoints, no questions. Babysitter handles everything autonomously.
+
+**Full reference:** [Slash Commands Reference](../reference/slash-commands.md)
+
+---
+
 ## Bonus: Experience Session Resumption
 
 One of Babysitter's superpowers is persistence. Let's try it:

@@ -26,6 +26,30 @@ Babysitter orchestrates `.a5c/runs/<runId>/` directories through iterative execu
 
 ---
 
+## Slash Commands
+
+Babysitter provides slash commands in Claude Code organized into **Core Modes** and **Utility Commands**.
+
+| Core Modes | | |
+|------------|-----------------|--------------|
+| `/babysitter:call` | Interactive (default) | Pauses at breakpoints for approval |
+| `/babysitter:yolo` | Ship while you sleep | Full auto, no breakpoints |
+| `/babysitter:forever` | Set it and forget it | Never-ending loop for monitoring |
+| `/babysitter:plan` | Look before you leap | Planning only, no execution |
+
+| Utilities | |
+|-----------|----------------|
+| `/babysitter:user-install` | First-time setup |
+| `/babysitter:project-install` | Onboard a project |
+| `/babysitter:doctor` | Diagnose run health |
+| `/babysitter:observe` | Real-time dashboard |
+| `/babysitter:assimilate` | Import methodologies |
+| `/babysitter:help` | Documentation |
+
+**[Full Documentation](../../docs/user-guide/reference/slash-commands.md)** — Detailed reference for all commands
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Installation

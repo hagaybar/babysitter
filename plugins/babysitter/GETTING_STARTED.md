@@ -143,6 +143,15 @@ Use the slash command to invoke the skill:
 /babysitter:call implement a Hello World function with TDD targeting 80% quality
 ```
 
+**Other modes available:**
+
+| Mode | Command | Behavior |
+|------|---------|----------|
+| Interactive | `/babysitter:call` | Pauses at breakpoints for approval (default) |
+| YOLO | `/babysitter:yolo` | Full auto, no breakpoints — ship while you sleep |
+| Forever | `/babysitter:forever` | Never-ending loop for monitoring/periodic tasks |
+| Plan | `/babysitter:plan` | Creates process without executing — review first |
+
 ### Method 2: Natural Language Request
 
 Simply ask Claude to use the babysitter skill:
