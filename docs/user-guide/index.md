@@ -158,6 +158,7 @@ Technical specifications and lookup resources.
 
 | Reference | Description |
 |-----------|-------------|
+| [Slash Commands](./reference/slash-commands.md) | **Core modes** (call, yolo, forever, plan) and utility commands for Claude Code |
 | [CLI Reference](./reference/cli-reference.md) | Complete command-line interface documentation |
 | [Configuration](./reference/configuration.md) | Environment variables and config file options |
 | [Error Catalog](./reference/error-catalog.md) | All error codes with solutions |

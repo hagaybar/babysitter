@@ -1256,6 +1256,69 @@ if (process.env.BABYSITTER_AUTO_APPROVE !== 'true') {
 
 ---
 
+## Command Tips
+
+Practical tips for using Babysitter's slash commands effectively.
+
+### Diagnosing Issues
+
+When something isn't working, skip the manual debugging. Run:
+
+```
+/babysitter:doctor <what went wrong>
+```
+
+The doctor performs 10 diagnostic checks: journal integrity, state cache, locks, sessions, hooks, logs, and more. It tells you exactly what's broken and how to fix it.
+
+**Example:**
+```
+/babysitter:doctor why didn't the stop hook fire?
+```
+
+If doctor finds something unusual, share the output — it helps identify edge cases.
+
+### Choosing the Right Mode
+
+| Situation | Use This |
+|-----------|----------|
+| Learning or critical work | `/babysitter:call` — interactive, pauses for approval |
+| Trusted task, want hands-off | `/babysitter:yolo` — ship while you sleep |
+| Review approach before executing | `/babysitter:plan` — planning only |
+| Continuous/periodic work | `/babysitter:forever` — never-ending loop |
+
+### First-Time Setup
+
+Before your first real project, run these once:
+
+```
+/babysitter:user-install    # Creates your profile
+/babysitter:project-install # Onboards your codebase
+```
+
+Your profiles personalize future runs — fewer questions, better-matched processes.
+
+### Real-Time Visibility
+
+Want to watch what's happening during a run?
+
+```
+/babysitter:observe
+```
+
+Opens a dashboard showing active runs, task progress, and journal events in real-time.
+
+### For Advanced Users
+
+Extend Babysitter with new integrations:
+
+```
+/babysitter:assimilate harness codex
+```
+
+Generates SDK bindings for external AI agents. Contribute your integration back to join the [Hall of Fame](https://www.a5c.ai/hall-of-fame).
+
+---
+
 ## Quick Reference Checklist
 
 ### Before Creating a Process
@@ -1291,6 +1354,7 @@ if (process.env.BABYSITTER_AUTO_APPROVE !== 'true') {
 
 ## Related Documentation
 
+- [Slash Commands](../reference/slash-commands.md) - All commands (call, yolo, forever, plan, doctor, etc.)
 - [Breakpoints](./breakpoints.md) - Human-in-the-loop approval
 - [Quality Convergence](./quality-convergence.md) - Iterative improvement
 - [Process Definitions](./process-definitions.md) - Creating workflows
