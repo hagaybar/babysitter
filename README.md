@@ -196,6 +196,54 @@ This project is licensed under the **MIT License**. See [LICENSE.md](https://git
 
 ---
 
+---
+
+## Compression
+
+Babysitter includes a 4-layer token compression subsystem (`packages/compression/`) that reduces context window usage by 50–67% on real sessions while maintaining 99% fact retention.
+
+### How It Works
+
+| Layer | Hook | Engine | Content | Reduction |
+|---|---|---|---|---|
+| 1a | userPromptHook | density-filter | User prompts | ~29% |
+| 1b | commandOutputHook | command-compressor | Bash/shell output | ~47% avg |
+| 2 | sdkContextHook | sentence-extractor | Agent/task context | ~87% |
+| 3 | processLibraryCache | sentence-extractor | Library files (pre-cached) | ~94% |
+
+### Quick Toggle
+
+```bash
+# Disable all compression
+export BABYSITTER_COMPRESSION_ENABLED=false
+
+# Disable a single layer
+babysitter compression:toggle sdkContextHook off
+
+# Show current effective config
+babysitter compression:config
+```
+
+### Config File
+
+Edit `.a5c/compression.config.json` to persist settings (env vars always take priority):
+
+```json
+{
+  "enabled": true,
+  "layers": {
+    "userPromptHook":    { "enabled": true, "threshold": 500, "keepRatio": 0.78 },
+    "commandOutputHook": { "enabled": true, "excludeCommands": ["jq", "curl", "docker"] },
+    "sdkContextHook":    { "enabled": true, "targetReduction": 0.15, "minCompressionTokens": 150 },
+    "processLibraryCache": { "enabled": true, "targetReduction": 0.35, "ttlHours": 24 }
+  }
+}
+```
+
+For full architecture details, API reference, tuning guide, and benchmark results, see [INTEGRATION.md](./INTEGRATION.md).
+
+---
+
 <div align="center">
 
 **Built with Claude by A5C AI**
