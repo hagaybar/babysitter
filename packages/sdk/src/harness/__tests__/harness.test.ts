@@ -31,6 +31,7 @@ const ENV_KEYS = [
   "CLAUDE_SESSION_ID",
   "CLAUDE_ENV_FILE",
   "CLAUDE_PLUGIN_ROOT",
+  "CODEX_THREAD_ID",
   "CODEX_SESSION_ID",
   "CODEX_ENV_FILE",
   "CODEX_PLUGIN_ROOT",
@@ -175,8 +176,8 @@ describe("CodexAdapter", () => {
       expect(adapter.isActive()).toBe(false);
     });
 
-    it("returns true when CODEX_SESSION_ID is set", () => {
-      process.env.CODEX_SESSION_ID = "test-session";
+    it("returns true when CODEX_THREAD_ID is set", () => {
+      process.env.CODEX_THREAD_ID = "test-session";
       const adapter = createCodexAdapter();
       expect(adapter.isActive()).toBe(true);
     });
@@ -184,15 +185,21 @@ describe("CodexAdapter", () => {
 
   describe("resolveSessionId", () => {
     it("returns parsed.sessionId first", () => {
-      process.env.CODEX_SESSION_ID = "env-session";
+      process.env.CODEX_THREAD_ID = "env-session";
       const adapter = createCodexAdapter();
       expect(adapter.resolveSessionId({ sessionId: "explicit" })).toBe("explicit");
     });
 
-    it("falls back to CODEX_SESSION_ID env", () => {
-      process.env.CODEX_SESSION_ID = "env-session";
+    it("falls back to CODEX_THREAD_ID env", () => {
+      process.env.CODEX_THREAD_ID = "env-session";
       const adapter = createCodexAdapter();
       expect(adapter.resolveSessionId({})).toBe("env-session");
+    });
+
+    it("falls back to legacy CODEX_SESSION_ID env", () => {
+      process.env.CODEX_SESSION_ID = "legacy-session";
+      const adapter = createCodexAdapter();
+      expect(adapter.resolveSessionId({})).toBe("legacy-session");
     });
   });
 
@@ -287,7 +294,7 @@ describe("Registry", () => {
 
   describe("detectAdapter", () => {
     it("returns codex adapter when codex env vars are set", () => {
-      process.env.CODEX_SESSION_ID = "session-123";
+      process.env.CODEX_THREAD_ID = "session-123";
       const adapter = detectAdapter();
       expect(adapter.name).toBe("codex");
     });

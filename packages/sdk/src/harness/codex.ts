@@ -43,6 +43,8 @@ function resolveCodexStateDir(args: {
 
 function resolveCodexSessionId(parsed: { sessionId?: string }): string | undefined {
   if (parsed.sessionId) return parsed.sessionId;
+  // Codex injects CODEX_THREAD_ID; keep CODEX_SESSION_ID as legacy fallback.
+  if (process.env.CODEX_THREAD_ID) return process.env.CODEX_THREAD_ID;
   if (process.env.CODEX_SESSION_ID) return process.env.CODEX_SESSION_ID;
 
   const envFile = process.env.CODEX_ENV_FILE;
@@ -50,7 +52,9 @@ function resolveCodexSessionId(parsed: { sessionId?: string }): string | undefin
 
   try {
     const content = readFileSync(envFile, "utf-8");
-    const match = content.match(/(?:^|\n)\s*(?:export\s+)?CODEX_SESSION_ID="([^"]+)"/);
+    const match = content.match(
+      /(?:^|\n)\s*(?:export\s+)?(?:CODEX_THREAD_ID|CODEX_SESSION_ID)="([^"]+)"/,
+    );
     return match?.[1] || undefined;
   } catch {
     return undefined;
@@ -65,6 +69,7 @@ export function createCodexAdapter(): HarnessAdapter {
 
     isActive(): boolean {
       return !!(
+        process.env.CODEX_THREAD_ID ||
         process.env.CODEX_SESSION_ID ||
         process.env.CODEX_ENV_FILE ||
         process.env.CODEX_PLUGIN_ROOT
@@ -137,4 +142,3 @@ export function createCodexAdapter(): HarnessAdapter {
     },
   };
 }
-
