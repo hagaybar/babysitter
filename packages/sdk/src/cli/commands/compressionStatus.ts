@@ -6,10 +6,8 @@
  */
 
 import * as path from 'node:path';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { loadCompressionConfig } from '../../compression/config-loader';
+import type { CompressionConfig } from '../../compression/config';
 
 export interface CompressionStatusOptions {
   json?: boolean;
@@ -23,27 +21,11 @@ interface LayerRow {
   keySettings: string;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function resolveProjectDir(cwd?: string): string {
   return cwd ?? process.cwd();
 }
 
-// Lazy-load the compression package so the SDK doesn't hard-depend on it at
-// module load time. The package ships as ESM source; we require a dynamic import.
-async function loadConfig(projectDir: string) {
-  // The compression package exports loadCompressionConfig which reads from the
-  // filesystem and env vars.  We call it with the resolved project dir.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('@a5c-ai/babysitter-compression') as {
-    loadCompressionConfig: (dir: string) => import('@a5c-ai/babysitter-compression').CompressionConfig;
-  };
-  return mod.loadCompressionConfig(projectDir);
-}
-
-function buildRows(config: Awaited<ReturnType<typeof loadConfig>>): LayerRow[] {
+function buildRows(config: CompressionConfig): LayerRow[] {
   const { layers } = config;
   return [
     {
@@ -102,16 +84,12 @@ function printTable(masterEnabled: boolean, rows: LayerRow[]): void {
   console.log('');
 }
 
-// ---------------------------------------------------------------------------
-// Handler
-// ---------------------------------------------------------------------------
-
 export async function handleCompressionStatus(opts: CompressionStatusOptions): Promise<number> {
   const projectDir = resolveProjectDir(opts.cwd);
 
-  let config: Awaited<ReturnType<typeof loadConfig>>;
+  let config: CompressionConfig;
   try {
-    config = await loadConfig(projectDir);
+    config = loadCompressionConfig(projectDir);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (opts.json) {

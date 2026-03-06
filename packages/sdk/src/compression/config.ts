@@ -9,7 +9,6 @@ export interface CompressionConfig {
   enabled: boolean;
   layers: {
     userPromptHook: {
-      /** Enable/disable compression of user prompts before they reach the model. */
       enabled: boolean;
       engine: 'density-filter' | 'sentence-extractor';
       /** Minimum token count before compression is attempted. */
@@ -18,14 +17,12 @@ export interface CompressionConfig {
       keepRatio: number;
     };
     commandOutputHook: {
-      /** Enable/disable compression of shell command output. */
       enabled: boolean;
       engine: 'command-compressor';
-      /** Command names (or prefixes) whose output should never be compressed. */
+      /** Command names whose output should never be compressed. */
       excludeCommands: string[];
     };
     sdkContextHook: {
-      /** Enable/disable compression of SDK context passed into each iteration. */
       enabled: boolean;
       engine: 'sentence-extractor';
       /** Target fraction to remove (0–1). E.g. 0.15 removes ~15%. */
@@ -40,7 +37,6 @@ export interface CompressionConfig {
       };
     };
     processLibraryCache: {
-      /** Enable/disable compression of process library cache entries. */
       enabled: boolean;
       engine: 'sentence-extractor';
       /** Target fraction to remove (0–1). */

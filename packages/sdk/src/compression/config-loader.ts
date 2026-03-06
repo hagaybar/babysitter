@@ -10,12 +10,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import type { CompressionConfig } from './config.js';
-import { DEFAULT_COMPRESSION_CONFIG } from './config.js';
-
-// ---------------------------------------------------------------------------
-// Env var names
-// ---------------------------------------------------------------------------
+import type { CompressionConfig } from './config';
+import { DEFAULT_COMPRESSION_CONFIG } from './config';
 
 export const COMPRESSION_ENV_VARS = {
   ENABLED: 'BABYSITTER_COMPRESSION_ENABLED',
@@ -25,11 +21,6 @@ export const COMPRESSION_ENV_VARS = {
   LIBRARY_CACHE: 'BABYSITTER_COMPRESSION_LIBRARY_CACHE',
 } as const;
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Parse an env-var string value as a boolean. Accepts "1"/"true"/"yes" as true. */
 function parseBool(value: string | undefined): boolean | undefined {
   if (value === undefined) return undefined;
   const v = value.trim().toLowerCase();
@@ -38,7 +29,6 @@ function parseBool(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
-/** Attempt to read and parse a JSON file; returns undefined on any error. */
 function readJsonFile(filePath: string): unknown {
   try {
     if (!existsSync(filePath)) return undefined;
@@ -49,14 +39,6 @@ function readJsonFile(filePath: string): unknown {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Deep merge
-// ---------------------------------------------------------------------------
-
-/**
- * Deeply merge `override` onto `base`.  Only keys present in `override` are
- * applied; missing keys fall through to `base`.  Arrays are replaced wholesale.
- */
 function deepMerge<T>(base: T, override: Partial<T>): T {
   if (
     typeof base !== 'object' ||
@@ -64,7 +46,7 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
     typeof override !== 'object' ||
     override === null
   ) {
-    return override as T ?? base;
+    return (override as T) ?? base;
   }
 
   const result: Record<string, unknown> = { ...(base as Record<string, unknown>) };
@@ -90,14 +72,8 @@ function deepMerge<T>(base: T, override: Partial<T>): T {
   return result as T;
 }
 
-// ---------------------------------------------------------------------------
-// File config loading
-// ---------------------------------------------------------------------------
-
-const CONFIG_FILENAME = 'compression.config.json';
-
 function loadFileConfig(dir: string): Partial<CompressionConfig> {
-  const filePath = path.join(dir, '.a5c', CONFIG_FILENAME);
+  const filePath = path.join(dir, '.a5c', 'compression.config.json');
   const parsed = readJsonFile(filePath);
   if (parsed === undefined || typeof parsed !== 'object' || parsed === null) {
     return {};
@@ -105,18 +81,12 @@ function loadFileConfig(dir: string): Partial<CompressionConfig> {
   return parsed as Partial<CompressionConfig>;
 }
 
-// ---------------------------------------------------------------------------
-// Env-var overlay
-// ---------------------------------------------------------------------------
-
 function applyEnvVars(config: CompressionConfig): CompressionConfig {
   let result = { ...config };
 
-  // Master switch
   const masterEnabled = parseBool(process.env[COMPRESSION_ENV_VARS.ENABLED]);
   if (masterEnabled !== undefined) {
     result = { ...result, enabled: masterEnabled };
-    // If master switch is turned off, disable all layers immediately
     if (!masterEnabled) {
       result = {
         ...result,
@@ -130,16 +100,12 @@ function applyEnvVars(config: CompressionConfig): CompressionConfig {
     }
   }
 
-  // Per-layer switches (only applied if master is still enabled)
   if (result.enabled) {
     const userPrompt = parseBool(process.env[COMPRESSION_ENV_VARS.USER_PROMPT]);
     if (userPrompt !== undefined) {
       result = {
         ...result,
-        layers: {
-          ...result.layers,
-          userPromptHook: { ...result.layers.userPromptHook, enabled: userPrompt },
-        },
+        layers: { ...result.layers, userPromptHook: { ...result.layers.userPromptHook, enabled: userPrompt } },
       };
     }
 
@@ -147,10 +113,7 @@ function applyEnvVars(config: CompressionConfig): CompressionConfig {
     if (commands !== undefined) {
       result = {
         ...result,
-        layers: {
-          ...result.layers,
-          commandOutputHook: { ...result.layers.commandOutputHook, enabled: commands },
-        },
+        layers: { ...result.layers, commandOutputHook: { ...result.layers.commandOutputHook, enabled: commands } },
       };
     }
 
@@ -158,10 +121,7 @@ function applyEnvVars(config: CompressionConfig): CompressionConfig {
     if (sdkContext !== undefined) {
       result = {
         ...result,
-        layers: {
-          ...result.layers,
-          sdkContextHook: { ...result.layers.sdkContextHook, enabled: sdkContext },
-        },
+        layers: { ...result.layers, sdkContextHook: { ...result.layers.sdkContextHook, enabled: sdkContext } },
       };
     }
 
@@ -169,20 +129,13 @@ function applyEnvVars(config: CompressionConfig): CompressionConfig {
     if (libraryCache !== undefined) {
       result = {
         ...result,
-        layers: {
-          ...result.layers,
-          processLibraryCache: { ...result.layers.processLibraryCache, enabled: libraryCache },
-        },
+        layers: { ...result.layers, processLibraryCache: { ...result.layers.processLibraryCache, enabled: libraryCache } },
       };
     }
   }
 
   return result;
 }
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Load the effective CompressionConfig by merging all sources.
@@ -193,24 +146,20 @@ function applyEnvVars(config: CompressionConfig): CompressionConfig {
 export function loadCompressionConfig(projectDir?: string): CompressionConfig {
   const cwd = projectDir ?? process.cwd();
 
-  // 1. Start with built-in defaults
-  let config: CompressionConfig = structuredClone
-    ? structuredClone(DEFAULT_COMPRESSION_CONFIG)
-    : (JSON.parse(JSON.stringify(DEFAULT_COMPRESSION_CONFIG)) as CompressionConfig);
+  let config: CompressionConfig = JSON.parse(
+    JSON.stringify(DEFAULT_COMPRESSION_CONFIG),
+  ) as CompressionConfig;
 
-  // 2. Apply user-level config (~/.a5c/compression.config.json)
   const userConfig = loadFileConfig(os.homedir());
   if (Object.keys(userConfig).length > 0) {
     config = deepMerge(config, userConfig);
   }
 
-  // 3. Apply project-level config (.a5c/compression.config.json)
   const projectConfig = loadFileConfig(cwd);
   if (Object.keys(projectConfig).length > 0) {
     config = deepMerge(config, projectConfig);
   }
 
-  // 4. Apply env-var overrides (highest priority)
   config = applyEnvVars(config);
 
   return config;

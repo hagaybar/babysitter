@@ -200,7 +200,7 @@ This project is licensed under the **MIT License**. See [LICENSE.md](https://git
 
 ## Compression
 
-Babysitter includes a 4-layer token compression subsystem (`packages/compression/`) that reduces context window usage by 50–67% on real sessions while maintaining 99% fact retention.
+Babysitter includes a 4-layer token compression subsystem (built into `packages/sdk/`) that reduces context window usage by 50–67% on real sessions while maintaining 99% fact retention.
 
 ### How It Works
 
@@ -240,7 +240,7 @@ Edit `.a5c/compression.config.json` to persist settings (env vars always take pr
 }
 ```
 
-For full architecture details, API reference, tuning guide, and benchmark results, see [INTEGRATION.md](./INTEGRATION.md).
+Toggle any layer with `babysitter compression:toggle <layer> <on|off>` or set individual values with `babysitter compression:set <key> <value>`.
 
 ---
 
