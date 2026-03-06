@@ -1,6 +1,7 @@
 ---
 description: Analysis for a run and its results, process, suggestions for process improvements, process optimizations, fixes, etc. for the next runs.
 argument-hint: Specific instructions for the run.
+allowed-tools: Read, Grep, Write, Task, Bash, Edit, Grep, Glob, WebFetch, WebSearch, Search, AskUserQuestion, TodoWrite, TodoRead, Skill, BashOutput, KillShell, MultiEdit, LS
 ---
 
 Invoke the babysitter:babysit skill (using the Skill tool) and follow its instructions (SKILL.md).

@@ -1,6 +1,7 @@
 ---
 description: Diagnose babysitter run health - journal integrity, state cache, effects, locks, sessions, logs, and disk usage
 argument-hint: "[run-id] Optional run ID to diagnose. If omitted, uses the most recent run."
+allowed-tools: Read, Grep, Write, Task, Bash, Edit, Grep, Glob, WebFetch, WebSearch, Search, AskUserQuestion, TodoWrite, TodoRead, Skill, BashOutput, KillShell, MultiEdit, LS
 ---
 
 You are a diagnostic agent for the babysitter runtime. Your job is to perform a comprehensive health check across 10 areas and produce a structured diagnostic report. Follow each section methodically. Track results as you go and produce the final summary at the end.

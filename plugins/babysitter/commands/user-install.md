@@ -1,6 +1,7 @@
 ---
 description: Set up babysitter for yourself. Guides you through onboarding — installs dependencies, interviews you about your specialties and preferences, builds your user profile, and configures the best tools for your workflow.
 argument-hint: Specific instructions for the run.
+allowed-tools: Read, Grep, Write, Task, Bash, Edit, Grep, Glob, WebFetch, WebSearch, Search, AskUserQuestion, TodoWrite, TodoRead, Skill, BashOutput, KillShell, MultiEdit, LS
 ---
 
 Invoke the babysitter:babysit skill (using the Skill tool) and follow its instructions (SKILL.md).

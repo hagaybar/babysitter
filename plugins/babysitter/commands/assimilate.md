@@ -1,11 +1,14 @@
 ---
 description: Assimilate an external methodology, harness, or specification into babysitter process definitions with skills and agents.
 argument-hint: Target to assimilate (e.g. repo URL, harness name, or spec path)
+allowed-tools: Read, Grep, Write, Task, Bash, Edit, Grep, Glob, WebFetch, WebSearch, Search, AskUserQuestion, TodoWrite, TodoRead, Skill, BashOutput, KillShell, MultiEdit, LS
 ---
 
 Invoke the babysitter:babysit skill (using the Skill tool) and follow its instructions (SKILL.md).
 
 Use the assimilation domain processes to convert external sources into well-defined babysitter process definitions with accompanying skills/ and agents/ directories.
+
+Run the process after formalizing it.
 
 Available assimilation workflows:
 - **methodology-assimilation** (`plugins/babysitter/skills/babysit/process/specializations/domains/assimilation/workflows/methodology-assimilation.js`) — Learns an external methodology from its repo and converts procedural instructions, commands, and manual flows into babysitter processes with refactored skills and agents. Supports output as methodology or specialization.

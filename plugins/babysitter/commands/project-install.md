@@ -1,6 +1,7 @@
 ---
 description: Set up a project for babysitting. Guides you through onboarding a new or existing project — researches the codebase, interviews you about goals and workflows, builds the project profile, installs the best tools, and optionally configures CI/CD integration.
 argument-hint: Specific instructions for the run.
+allowed-tools: Read, Grep, Write, Task, Bash, Edit, Grep, Glob, WebFetch, WebSearch, Search, AskUserQuestion, TodoWrite, TodoRead, Skill, BashOutput, KillShell, MultiEdit, LS
 ---
 
 Invoke the babysitter:babysit skill (using the Skill tool) and follow its instructions (SKILL.md).

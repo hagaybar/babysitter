@@ -1,6 +1,7 @@
 ---
 description: help and documentation for babysitter command usage, processes, skills, agents, and methodologies. use this command to understand how to use babysitter effectively.
 argument-hint: Specific command, process, skill, agent, or methodology you want help with (e.g. "help command doctor" or "help process retrospect").
+allowed-tools: Read, Grep, Write, Task, Bash, Edit, Grep, Glob, WebFetch, WebSearch, Search, AskUserQuestion, TodoWrite, TodoRead, Skill, BashOutput, KillShell, MultiEdit, LS
 ---
 
 ## if no arguments provided:
