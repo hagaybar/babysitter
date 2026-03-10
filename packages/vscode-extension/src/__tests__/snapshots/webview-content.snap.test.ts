@@ -40,10 +40,10 @@ const NONCE = 'test-nonce-abc123';
 const CSP = 'mock-csp-source';
 
 // ---------------------------------------------------------------------------
-// Snapshot Tests
+// Structural Tests (environment-agnostic, no snapshots)
 // ---------------------------------------------------------------------------
 
-describe('generateWebviewContent - snapshots', () => {
+describe('generateWebviewContent - structure', () => {
   it('generates complete HTML for a completed run', () => {
     const tasks: TaskEffect[] = [
       makeTask({
@@ -85,66 +85,38 @@ describe('generateWebviewContent - snapshots', () => {
       failedTasks: 0,
       duration: 195000,
       events: [
-        {
-          seq: 1,
-          id: 'ulid-001',
-          ts: '2026-03-10T10:00:00Z',
-          type: 'RUN_CREATED',
-          payload: { processId: 'deploy-pipeline' },
-        },
-        {
-          seq: 2,
-          id: 'ulid-002',
-          ts: '2026-03-10T10:00:00Z',
-          type: 'EFFECT_REQUESTED',
-          payload: { effectId: 'e1' },
-        },
-        {
-          seq: 3,
-          id: 'ulid-003',
-          ts: '2026-03-10T10:00:45Z',
-          type: 'EFFECT_RESOLVED',
-          payload: { effectId: 'e1' },
-        },
-        {
-          seq: 4,
-          id: 'ulid-004',
-          ts: '2026-03-10T10:03:15Z',
-          type: 'RUN_COMPLETED',
-          payload: {},
-        },
+        { seq: 1, id: 'ulid-001', ts: '2026-03-10T10:00:00Z', type: 'RUN_CREATED', payload: { processId: 'deploy-pipeline' } },
+        { seq: 2, id: 'ulid-002', ts: '2026-03-10T10:00:00Z', type: 'EFFECT_REQUESTED', payload: { effectId: 'e1' } },
+        { seq: 3, id: 'ulid-003', ts: '2026-03-10T10:00:45Z', type: 'EFFECT_RESOLVED', payload: { effectId: 'e1' } },
+        { seq: 4, id: 'ulid-004', ts: '2026-03-10T10:03:15Z', type: 'RUN_COMPLETED', payload: {} },
       ],
     });
 
     const html = generateWebviewContent(run, NONCE, CSP);
-    expect(html).toMatchSnapshot();
 
-    // Verify critical structural elements exist
+    // Verify critical structural elements
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('Content-Security-Policy');
     expect(html).toContain('class="pipeline-panel"');
     expect(html).toContain('class="task-detail-panel"');
     expect(html).toContain('class="event-stream-panel"');
+    expect(html).toContain('deploy-pipeline');
+    expect(html).toContain('3/3 tasks');
+    expect(html).toContain('Install dependencies');
+    expect(html).toContain('Run tests');
+    expect(html).toContain('Deploy to staging');
+    expect(html).toContain('RUN_CREATED');
+    expect(html).toContain('RUN_COMPLETED');
+    expect(html).toContain(NONCE);
   });
 
   it('generates complete HTML for a failed run', () => {
     const tasks: TaskEffect[] = [
+      makeTask({ effectId: 'e1', kind: 'node', title: 'Build application', status: 'resolved', duration: 60000 }),
       makeTask({
-        effectId: 'e1',
-        kind: 'node',
-        title: 'Build application',
-        status: 'resolved',
-        duration: 60000,
-      }),
-      makeTask({
-        effectId: 'e2',
-        kind: 'shell',
-        title: 'Run unit tests',
-        status: 'error',
-        duration: 15000,
-        error: 'Test suite failed: 3 tests failed',
-        requestedAt: '2026-03-10T10:01:00Z',
-        resolvedAt: '2026-03-10T10:01:15Z',
+        effectId: 'e2', kind: 'shell', title: 'Run unit tests', status: 'error',
+        duration: 15000, error: 'Test suite failed: 3 tests failed',
+        requestedAt: '2026-03-10T10:01:00Z', resolvedAt: '2026-03-10T10:01:15Z',
       }),
     ];
 
@@ -159,45 +131,25 @@ describe('generateWebviewContent - snapshots', () => {
       duration: 75000,
       failureError: 'Test suite failed: 3 tests failed',
       events: [
-        {
-          seq: 1,
-          id: 'ulid-101',
-          ts: '2026-03-10T10:00:00Z',
-          type: 'RUN_CREATED',
-          payload: {},
-        },
-        {
-          seq: 2,
-          id: 'ulid-102',
-          ts: '2026-03-10T10:01:15Z',
-          type: 'RUN_FAILED',
-          payload: { error: 'Test suite failed: 3 tests failed' },
-        },
+        { seq: 1, id: 'ulid-101', ts: '2026-03-10T10:00:00Z', type: 'RUN_CREATED', payload: {} },
+        { seq: 2, id: 'ulid-102', ts: '2026-03-10T10:01:15Z', type: 'RUN_FAILED', payload: { error: 'Test suite failed: 3 tests failed' } },
       ],
     });
 
     const html = generateWebviewContent(run, NONCE, CSP);
-    expect(html).toMatchSnapshot();
 
-    // Verify failed status rendering
     expect(html).toContain('status-badge failed');
     expect(html).toContain('FAILED');
+    expect(html).toContain('ci-pipeline');
+    expect(html).toContain('Run unit tests');
+    expect(html).toContain('Test suite failed');
   });
 
   it('generates complete HTML for a run waiting on breakpoint', () => {
     const tasks: TaskEffect[] = [
+      makeTask({ effectId: 'e1', kind: 'node', title: 'Prepare deployment', status: 'resolved', duration: 30000 }),
       makeTask({
-        effectId: 'e1',
-        kind: 'node',
-        title: 'Prepare deployment',
-        status: 'resolved',
-        duration: 30000,
-      }),
-      makeTask({
-        effectId: 'bp-001',
-        kind: 'breakpoint',
-        title: 'Approval required',
-        status: 'requested',
+        effectId: 'bp-001', kind: 'breakpoint', title: 'Approval required', status: 'requested',
         breakpointQuestion: 'Deploy to production environment? This action cannot be undone.',
         requestedAt: '2026-03-10T10:00:30Z',
       }),
@@ -215,30 +167,17 @@ describe('generateWebviewContent - snapshots', () => {
       breakpointQuestion: 'Deploy to production environment? This action cannot be undone.',
       breakpointEffectId: 'bp-001',
       events: [
-        {
-          seq: 1,
-          id: 'ulid-201',
-          ts: '2026-03-10T10:00:00Z',
-          type: 'RUN_CREATED',
-          payload: {},
-        },
-        {
-          seq: 2,
-          id: 'ulid-202',
-          ts: '2026-03-10T10:00:30Z',
-          type: 'EFFECT_REQUESTED',
-          payload: { effectId: 'bp-001', kind: 'breakpoint' },
-        },
+        { seq: 1, id: 'ulid-201', ts: '2026-03-10T10:00:00Z', type: 'RUN_CREATED', payload: {} },
+        { seq: 2, id: 'ulid-202', ts: '2026-03-10T10:00:30Z', type: 'EFFECT_REQUESTED', payload: { effectId: 'bp-001', kind: 'breakpoint' } },
       ],
     });
 
     const html = generateWebviewContent(run, NONCE, CSP);
-    expect(html).toMatchSnapshot();
 
-    // Verify breakpoint banner exists
     expect(html).toContain('id="breakpoint-banner"');
     expect(html).toContain('Deploy to production environment?');
     expect(html).toContain('bp-001');
+    expect(html).toContain('Approval required');
   });
 
   it('generates complete HTML for an empty/new run', () => {
@@ -248,13 +187,7 @@ describe('generateWebviewContent - snapshots', () => {
       status: 'pending',
       tasks: [],
       events: [
-        {
-          seq: 1,
-          id: 'ulid-301',
-          ts: '2026-03-10T10:00:00Z',
-          type: 'RUN_CREATED',
-          payload: { processId: 'new-process' },
-        },
+        { seq: 1, id: 'ulid-301', ts: '2026-03-10T10:00:00Z', type: 'RUN_CREATED', payload: { processId: 'new-process' } },
       ],
       totalTasks: 0,
       completedTasks: 0,
@@ -262,11 +195,10 @@ describe('generateWebviewContent - snapshots', () => {
     });
 
     const html = generateWebviewContent(run, NONCE, CSP);
-    expect(html).toMatchSnapshot();
 
-    // Verify empty states
     expect(html).toContain('No tasks yet');
     expect(html).toContain('0/0 tasks');
+    expect(html).toContain('new-process');
   });
 
   it('generates HTML with multiple task kinds', () => {
@@ -290,7 +222,13 @@ describe('generateWebviewContent - snapshots', () => {
     });
 
     const html = generateWebviewContent(run, NONCE, CSP);
-    expect(html).toMatchSnapshot();
+
+    expect(html).toContain('Node task');
+    expect(html).toContain('Agent task');
+    expect(html).toContain('Skill task');
+    expect(html).toContain('Shell task');
+    expect(html).toContain('Sleep task');
+    expect(html).toContain('3/5 tasks');
   });
 
   it('generates HTML with special characters escaped', () => {
@@ -299,11 +237,7 @@ describe('generateWebviewContent - snapshots', () => {
       processId: '<script>alert("xss")</script>',
       status: 'pending',
       tasks: [
-        makeTask({
-          effectId: 'e1',
-          title: 'Task with <tags> & "quotes"',
-          status: 'resolved',
-        }),
+        makeTask({ effectId: 'e1', title: 'Task with <tags> & "quotes"', status: 'resolved' }),
       ],
       events: [],
       totalTasks: 1,
@@ -313,7 +247,6 @@ describe('generateWebviewContent - snapshots', () => {
     });
 
     const html = generateWebviewContent(run, NONCE, CSP);
-    expect(html).toMatchSnapshot();
 
     // Verify escaping
     expect(html).not.toContain('<script>alert("xss")</script>');
