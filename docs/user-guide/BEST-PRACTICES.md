@@ -1,6 +1,6 @@
 # Babysitter Best Practices
 
-Babysitter enforces obedience to agentic workforces through deterministic, hallucination-free self-orchestration. Everything you already know about Claude Code works here - but now your agents do exactly what the process permits, nothing more. This guide covers how to use that control effectively.
+Babysitter is Claude Code with superpowers. Everything you already know about Claude Code works here. This guide covers the extra capabilities you get and when to use them.
 
 ---
 
@@ -47,7 +47,7 @@ Babysitter enforces obedience to agentic workforces through deterministic, hallu
 
 You talk to Babysitter the same way you talk to Claude Code. Just describe what you want done.
 
-The difference is what happens behind the scenes: Babysitter enforces structured processes with quality gates and human checkpoints. Agents can only do what the process permits - no hallucinating extra steps, no skipping gates. Your work gets done properly - not just 80%.
+The difference is what happens behind the scenes: Babysitter adds structured processes, quality gates, and iterative improvement loops. Your work gets done properly - not just 80%.
 
 **Model**: Use Opus 4.6 or later for best results. Babysitter automatically uses Haiku for simple summarization tasks.
 
