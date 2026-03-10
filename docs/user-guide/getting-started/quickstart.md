@@ -4,7 +4,7 @@
 
 Welcome! In this quickstart, you will build a calculator module using Test-Driven Development (TDD) with Babysitter. By the end, you will have experienced:
 
-- Automatic quality convergence (iterate until quality target met)
+- Enforced quality gates (agents must pass gates to proceed)
 - The TDD workflow (tests first, then implementation)
 - Journal-based persistence (everything is recorded)
 
@@ -25,7 +25,7 @@ A simple calculator module with:
 The result will include:
 - Working implementation
 - Test suite with multiple test cases
-- 80%+ quality score achieved through automatic iteration
+- 80%+ quality score enforced through quality gates
 
 ---
 
