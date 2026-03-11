@@ -2,6 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const { runJson, supports } = require('./sdk-cli');
+const { getLibraryStats, resolveProcessLibraryRoot, resolveReferenceRoot } = require('./process-library');
+const { buildIndex, loadIndex, searchIndex } = require('./process-index');
 
 /**
  * Run a babysitter CLI sub-command and return parsed JSON output.
@@ -28,11 +30,25 @@ function runBabysitter(subArgs) {
  * @returns {Object|null} Discovery results or null on error
  */
 function discoverSkills(options = {}) {
+  const repoRoot = options.repoRoot || process.cwd();
+  const processRoot = resolveProcessLibraryRoot(repoRoot);
+  const indexPath = path.join(repoRoot, '.a5c', 'index', 'process-library-index.json');
+  const cachedIndex = loadIndex(indexPath) || buildIndex(processRoot, indexPath);
+
   if (!supports('skill:discover')) {
+    const stats = getLibraryStats(repoRoot);
     return {
       mode: 'compat-core',
       skills: [],
       agents: [],
+      processLibrary: stats,
+      processLibraryRoot: stats.processRoot,
+      referenceRoot: stats.referenceRoot,
+      processIndex: {
+        path: indexPath,
+        count: cachedIndex.count,
+        sample: searchIndex(cachedIndex, options.query || '').slice(0, 20).map((e) => e.path),
+      },
       message: 'skill:discover unsupported by this SDK build; using local/manual skill loading only.',
     };
   }
@@ -63,7 +79,14 @@ function discoverSkills(options = {}) {
     args.push('--process-path', options.processPath);
   }
 
-  return runBabysitter(args);
+  const result = runBabysitter(args) || {};
+  result.processLibraryRoot = processRoot;
+  result.referenceRoot = resolveReferenceRoot(repoRoot);
+  result.processIndex = {
+    path: indexPath,
+    count: cachedIndex.count,
+  };
+  return result;
 }
 
 /**
