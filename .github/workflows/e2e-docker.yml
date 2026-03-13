@@ -73,29 +73,8 @@ jobs:
             e2e-tests/docker/pi-workflow.test.ts \
             2>&1 | tee e2e-artifacts/structural-tests.log
 
-      # NOTE: orchestration.test.ts is disabled — Anthropic Foundry model
-      # is no longer provisioned.  Re-enable when Foundry access is restored.
-      # - name: Run Anthropic Foundry E2E orchestration tests
-      #   ...
-
-      - name: Run Pi harness E2E tests (Azure OpenAI)
-        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          npx vitest run --config e2e-tests/docker/vitest.config.ts \
-            --reporter=default --reporter=json \
-            --outputFile.json=e2e-artifacts/test-results-e2e.json \
-            e2e-tests/docker/pi-workflow.test.ts \
-            2>&1 | tee e2e-artifacts/e2e-tests.log
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          AZURE_OPENAI_PROJECT_NAME: ${{ vars.AZURE_OPENAI_PROJECT_NAME }}
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          A5C_PROVIDER_NAME: ${{ vars.A5C_PROVIDER_NAME }}
-          A5C_SELECTED_CLI_COMMAND: ${{ vars.A5C_SELECTED_CLI_COMMAND }}
-          A5C_SELECTED_MODEL: ${{ vars.A5C_SELECTED_MODEL }}
-        timeout-minutes: 35
+      # NOTE: orchestration.test.ts (Anthropic Foundry) is disabled —
+      # Foundry model is no longer provisioned.  Re-enable when restored.
 
       - name: Upload test artifacts
         if: always()
