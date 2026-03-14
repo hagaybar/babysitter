@@ -563,6 +563,8 @@ CRITICAL RULE: Never fallback to simpler execution if the user activated this sk
 
 CRITICAL RULE: After run:create or run-session association and after each effect is posted, you MUST stop the session and return control. Do NOT proceed to the next run:iterate in the same session turn. The stop-hook will call you back to continue. Running multiple iterations in a single session turn bypasses the hook loop and breaks the orchestration model.
 
+CRITICAL RULE: NEVER bypass, avoid or skip the babysitter orchestration model when the user explicitly requested this skill. Do not execute the tasks yourself, do not loop programmatically, do not create helper scripts to orchestrate the runs. Use the CLI to drive the orchestration loop and do not bypass it. not for simple tasks, and even if things get complicated or don't go smoothly. persist in executing the orchestration itself rather than simplifying the execution by bypassing the process above.
+
 ## See Also
 - `process/tdd-quality-convergence.js` - TDD quality convergence example - read and look for relevant processes and methodolies before creating the code process for a new run (create the run using the CLI, then use these process as a reference)
 - `reference/ADVANCED_PATTERNS.md` - Agent/skill patterns, iterative convergence
