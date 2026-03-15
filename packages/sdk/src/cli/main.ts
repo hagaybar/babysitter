@@ -31,6 +31,7 @@ import {
   handleSessionIterationMessage,
 } from "./commands/session";
 import { handleSkillDiscover, handleSkillFetchRemote, discoverSkillsInternal, discoverFromProcessFile } from "./commands/skill";
+import { handleMcpServe } from "./commands/mcpServe";
 import { handleHookLog } from "./commands/hookLog";
 import { handleHookRun } from "./commands/hookRun";
 import { handleProfileCommand } from "./commands/profile";
@@ -48,6 +49,12 @@ import {
   handlePluginRemoveFromRegistry,
 } from "./commands/plugin";
 import type { PluginCommandArgs } from "./commands/plugin";
+import { handleTokensStats } from "./commands/tokensStats";
+import { handleCompressionStatus } from "./commands/compressionStatus";
+import { handleCompressionToggle } from "./commands/compressionToggle";
+import { handleCompressionReset } from "./commands/compressionReset";
+import { handleCompressionSet } from "./commands/compressionSet";
+import { handleCompressOutput } from "./commands/compressOutput";
 import { resolveCompletionProof } from "./completionProof";
 import { getAdapter, getAdapterByName } from "../harness";
 import type { SessionBindResult } from "../harness";
@@ -82,7 +89,8 @@ const USAGE = `Usage:
   babysitter session:iteration-message --iteration <n> [--run-id <id>] [--runs-dir <dir>] [--plugin-root <dir>] [--json]
   babysitter skill:discover --plugin-root <dir> [--run-id <id>] [--cache-ttl <seconds>] [--runs-dir <dir>] [--include-remote] [--summary-only] [--process-path <path>] [--json]
   babysitter hook:log --hook-type <type> --log-file <path> [--json]
-  babysitter hook:run --hook-type <stop|session-start> [--harness <claude-code|codex|gemini-cli>] [--plugin-root <dir>] [--state-dir <dir>] [--runs-dir <dir>] [--json] [--verbose]
+  babysitter hook:run --hook-type <stop|session-start|user-prompt-submit|pre-tool-use> [--harness <claude-code|codex|gemini-cli>] [--plugin-root <dir>] [--state-dir <dir>] [--runs-dir <dir>] [--json] [--verbose]
+  babysitter compress-output <command and args...>
   babysitter skill:fetch-remote --source-type <github|well-known> --url <url> [--json]
   babysitter profile:read --user|--project [--dir <dir>] [--json]
   babysitter profile:write --user|--project --input <file> [--dir <dir>] [--json]
@@ -98,6 +106,12 @@ const USAGE = `Usage:
   babysitter plugin:update-marketplace --marketplace-name <name> [--marketplace-branch <ref>] [--global|--project] [--json] [--verbose]
   babysitter plugin:update-registry [<pluginName>] [--plugin-name <name>] [--plugin-version <ver>] [--global|--project] [--json] [--verbose]
   babysitter plugin:remove-from-registry [<pluginName>] [--plugin-name <name>] [--global|--project] [--json] [--verbose]
+  babysitter tokens:stats [runId] [--all] [--runs-dir <dir>] [--json]
+  babysitter compression:status [--json]
+  babysitter compression:toggle <layer> <on|off> [--json]
+  babysitter compression:set <layer.key> <value> [--json]
+  babysitter compression:reset [--json]
+  babysitter mcp:serve [--json]
   babysitter health [--json] [--verbose]
   babysitter configure [show|validate|paths] [--json] [--defaults-only]
   babysitter version
@@ -119,6 +133,13 @@ interface ParsedArgs {
   verbose: boolean;
   helpRequested: boolean;
   pendingOnly: boolean;
+  // compress-output command args
+  compressOutputArgs?: string[];
+  // compression command args
+  compressionLayer?: string;
+  compressionToggleValue?: boolean;
+  compressionSetKey?: string;
+  compressionSetValue?: string;
   kindFilter?: string;
   limit?: number;
   reverseOrder: boolean;
@@ -185,6 +206,9 @@ interface ParsedArgs {
   marketplaceBranch?: string;
   pluginScope?: "global" | "project";
   pluginForce?: boolean;
+  // tokens:stats flags
+  tokensAll?: boolean;
+  tokensRunId?: string;
 }
 
 interface ActionSummary {
@@ -519,6 +543,11 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.pluginScope = "global";
       continue;
     }
+    // tokens:stats flags
+    if (arg === "--all") {
+      parsed.tokensAll = true;
+      continue;
+    }
     positionals.push(arg);
   }
   if (parsed.command === "task:post") {
@@ -546,6 +575,24 @@ function parseArgs(argv: string[]): ParsedArgs {
     if (positionals.length > 0 && !parsed.pluginName) {
       parsed.pluginName = positionals[0];
     }
+  } else if (parsed.command === "tokens:stats") {
+    [parsed.tokensRunId] = positionals;
+  } else if (parsed.command === "compression:toggle") {
+    const [layer, onOff] = positionals;
+    parsed.compressionLayer = layer;
+    if (onOff !== undefined) {
+      const normalized = onOff.toLowerCase();
+      if (normalized !== "on" && normalized !== "off") {
+        throw new Error(`compression:toggle value must be "on" or "off" (received: ${onOff})`);
+      }
+      parsed.compressionToggleValue = normalized === "on";
+    }
+  } else if (parsed.command === "compression:set") {
+    const [key, value] = positionals;
+    parsed.compressionSetKey = key;
+    parsed.compressionSetValue = value;
+  } else if (parsed.command === "compress-output") {
+    parsed.compressOutputArgs = positionals;
   }
   return parsed;
 }
@@ -752,7 +799,7 @@ function resolveArtifactAbsolutePath(runDir: string, ref?: string | null): strin
     return candidates[0].absolute;
   }
 
-  return path.join(absoluteRunDir, normalized);
+  return collapseDoubledA5cRuns(path.join(absoluteRunDir, normalized));
 }
 
 type ArtifactCandidate = { absolute: string; relative: string; outsideRun: boolean };
@@ -766,7 +813,7 @@ function collectArtifactCandidates(runDir: string, ref: string): ArtifactCandida
     seen.set(normalizedAbs, { absolute: normalizedAbs, relative, outsideRun });
   };
 
-  pushCandidate(path.join(runDir, ref));
+  pushCandidate(collapseDoubledA5cRuns(path.join(runDir, ref)));
   pushCandidate(path.resolve(ref));
 
   return Array.from(seen.values());
@@ -2037,8 +2084,15 @@ const VALID_COMMANDS = [
   "plugin:update-marketplace",
   "plugin:update-registry",
   "plugin:remove-from-registry",
+  "mcp:serve",
   "health",
   "configure",
+  "tokens:stats",
+  "compression:status",
+  "compression:toggle",
+  "compression:set",
+  "compression:reset",
+  "compress-output",
   "version",
 ];
 
@@ -2362,6 +2416,9 @@ export function createBabysitterCli() {
             return await handlePluginRemoveFromRegistry(pluginArgs);
           }
         }
+        if (parsed.command === "mcp:serve") {
+          return await handleMcpServe({ json: parsed.json });
+        }
         if (parsed.command === "health") {
           return await handleHealthCommand({
             json: parsed.json,
@@ -2374,6 +2431,53 @@ export function createBabysitterCli() {
             json: parsed.json,
             defaultsOnly: parsed.defaultsOnly,
           });
+        }
+        if (parsed.command === "tokens:stats") {
+          return await handleTokensStats({
+            runId: parsed.tokensRunId,
+            all: parsed.tokensAll,
+            json: parsed.json,
+            runsDir: parsed.runsDir,
+          });
+        }
+        // Compression commands
+        if (parsed.command === "compression:status") {
+          return handleCompressionStatus({ json: parsed.json });
+        }
+        if (parsed.command === "compression:toggle") {
+          if (!parsed.compressionLayer) {
+            console.error("compression:toggle requires <layer> and <on|off> arguments");
+            console.error(USAGE);
+            return 1;
+          }
+          if (parsed.compressionToggleValue === undefined) {
+            console.error("compression:toggle requires <on|off> as the second argument");
+            console.error(USAGE);
+            return 1;
+          }
+          return await handleCompressionToggle({
+            layer: parsed.compressionLayer,
+            value: parsed.compressionToggleValue,
+            json: parsed.json,
+          });
+        }
+        if (parsed.command === "compression:set") {
+          if (!parsed.compressionSetKey || parsed.compressionSetValue === undefined) {
+            console.error("compression:set requires <layer.key> and <value> arguments");
+            console.error(USAGE);
+            return 1;
+          }
+          return await handleCompressionSet({
+            key: parsed.compressionSetKey,
+            value: parsed.compressionSetValue,
+            json: parsed.json,
+          });
+        }
+        if (parsed.command === "compression:reset") {
+          return await handleCompressionReset({ json: parsed.json });
+        }
+        if (parsed.command === "compress-output") {
+          return handleCompressOutput({ args: parsed.compressOutputArgs ?? [] });
         }
 
         // This should not be reached due to the VALID_COMMANDS check above
