@@ -26,6 +26,12 @@ const packageManifests = [
   { path: "packages/babysitter/package.json" },
 ];
 
+// Observer dashboard is versioned independently (starts at 1.0.0)
+// because it has a different maturity and release cadence than the SDK.
+const independentManifests = [
+  { path: "packages/observer-dashboard/package.json" },
+];
+
 const pluginManifests = [
   { path: "plugins/babysitter/.claude-plugin/plugin.json" },
   { path: "plugins/babysitter/plugin.json" },
@@ -62,6 +68,20 @@ const newVersion = bumpVersion(currentVersion, bumpTarget);
 
 for (const manifest of manifests) {
   manifest.data.version = newVersion;
+  writeFileSync(manifest.path, `${JSON.stringify(manifest.data, null, 2)}\n`);
+}
+
+// Update independently versioned packages - bump from their own current version
+const independentManifestData = independentManifests.map(({ path }) => ({
+  path,
+  data: JSON.parse(readFileSync(path, "utf8")),
+}));
+const independentVersions = {};
+for (const manifest of independentManifestData) {
+  const currentIndependentVersion = manifest.data.version;
+  const newIndependentVersion = bumpVersion(currentIndependentVersion, bumpTarget);
+  manifest.data.version = newIndependentVersion;
+  independentVersions[manifest.path] = newIndependentVersion;
   writeFileSync(manifest.path, `${JSON.stringify(manifest.data, null, 2)}\n`);
 }
 
@@ -132,6 +152,22 @@ if (existsSync(lockPath)) {
     const babysitterNodeModulesKey = `node_modules/${babysitterName}`;
     if (lock.packages && lock.packages[babysitterNodeModulesKey]) {
       lock.packages[babysitterNodeModulesKey].version = newVersion;
+    }
+  }
+  // Observer dashboard uses independent versioning
+  const observerWorkspaceKey = "packages/observer-dashboard";
+  const observerVersion = independentVersions["packages/observer-dashboard/package.json"];
+  if (observerVersion && lock.packages && lock.packages[observerWorkspaceKey]) {
+    lock.packages[observerWorkspaceKey].version = observerVersion;
+  }
+  const observerManifest = independentManifestData.find(
+    (manifest) => manifest.path === "packages/observer-dashboard/package.json",
+  );
+  const observerName = observerManifest?.data?.name;
+  if (observerName && observerVersion) {
+    const observerNodeModulesKey = `node_modules/${observerName}`;
+    if (lock.packages && lock.packages[observerNodeModulesKey]) {
+      lock.packages[observerNodeModulesKey].version = observerVersion;
     }
   }
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);

@@ -1,0 +1,11 @@
+.next/
+dist/
+node_modules/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
