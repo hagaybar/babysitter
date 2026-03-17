@@ -62,18 +62,6 @@ jobs:
           set -euo pipefail
           npm run test:sdk 2>&1 | tee artifacts/logs/unit-tests.log
 
-      - name: Observer dashboard unit tests
-        run: |
-          set -euo pipefail
-          npm run test:observer 2>&1 | tee artifacts/logs/observer-tests.log
-
-      - name: Observer dashboard type check
-        run: |
-          set -euo pipefail
-          npx --workspace=@a5c-ai/babysitter-observer-dashboard tsc --noEmit --pretty 2>&1 | tee artifacts/logs/observer-typecheck.log || true
-          # Type check is advisory (ignoreBuildErrors is set due to React 18/19 monorepo conflict).
-          # Errors are logged but do not block release. Remove || true when React versions are unified.
-
       - name: Upload build logs
         uses: actions/upload-artifact@v4
         with:
@@ -138,7 +126,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json packages/sdk/package.json packages/babysitter/package.json packages/observer-dashboard/package.json package-lock.json CHANGELOG.md plugins/babysitter/.claude-plugin/plugin.json plugins/babysitter/plugin.json plugins/babysitter/versions.json .claude-plugin/marketplace.json
+          git add package.json packages/sdk/package.json packages/babysitter/package.json package-lock.json CHANGELOG.md plugins/babysitter/.claude-plugin/plugin.json plugins/babysitter/plugin.json plugins/babysitter/versions.json .claude-plugin/marketplace.json
           if git diff --cached --quiet; then
             echo "No version changes detected."
           else
@@ -152,18 +140,11 @@ jobs:
           set -euo pipefail
           npm run build:sdk
 
-      - name: Build observer dashboard
-        run: |
-          set -euo pipefail
-          npm run build --workspace=@a5c-ai/babysitter-observer-dashboard
-          npm run build:cli --workspace=@a5c-ai/babysitter-observer-dashboard
-
       - name: Pack npm artifacts
         run: |
           set -euo pipefail
           npm pack --workspace=@a5c-ai/babysitter-sdk --pack-destination artifacts/release
           (cd packages/babysitter && npm pack --pack-destination ../../artifacts/release)
-          (cd packages/observer-dashboard && npm pack --pack-destination ../../artifacts/release)
 
       - name: Generate artifact checksums
         run: |
@@ -201,14 +182,6 @@ jobs:
           set -euo pipefail
           npm publish --access public
         working-directory: packages/babysitter
-
-      - name: Publish observer dashboard to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          set -euo pipefail
-          npm publish --access public
-        working-directory: packages/observer-dashboard
 
       - name: Tag release
         run: |
