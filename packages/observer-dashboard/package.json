@@ -33,6 +33,7 @@
   },
   "files": [
     "dist",
+    "src",
     ".next/server",
     ".next/static",
     ".next/BUILD_ID",
